@@ -10,7 +10,7 @@ BINARY_NAME=prom-scrape-analyzer
 all: test build
 
 build:
-	$(GOBUILD) -o $(BINARY_NAME) -v ./cmd/main.go
+	$(GOBUILD) -o $(BINARY_NAME) -v ./cmd/...
 
 test:
 	$(GOTEST) -v ./...
