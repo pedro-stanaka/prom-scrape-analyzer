@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -15,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/textparse"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 )
 
@@ -124,7 +126,6 @@ func readResponse(resp *http.Response, logger log.Logger) (string, []byte, error
 
 func extractMetrics(body []byte, contentType string, logger log.Logger) (map[string]SeriesSet, error) {
 	metrics := make(map[string]SeriesSet)
-	// Parse the response body.
 	parser, err := textparse.New(body, contentType, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parser: %w", err)
@@ -133,11 +134,9 @@ func extractMetrics(body []byte, contentType string, logger log.Logger) (map[str
 	var (
 		lset        labels.Labels
 		currentType string
-		val         float64
-		t           int64
+		defTime     = timestamp.FromTime(time.Now())
 	)
 
-	// Analyze the cardinality.
 	for {
 		entry, err := parser.Next()
 		if err == io.EOF {
@@ -150,25 +149,10 @@ func extractMetrics(body []byte, contentType string, logger log.Logger) (map[str
 
 		switch entry {
 		case textparse.EntryType:
-			// Handle metric type
 			_, metricType := parser.Type()
 			currentType = string(metricType)
-			level.Debug(logger).Log("msg", "found metric type", "type", metricType)
-
-		case textparse.EntryHelp:
-			// Handle metric help text
-			metricName, help := parser.Help()
-			level.Debug(logger).Log("msg", "found metric help", "metric", string(metricName), "help", help)
-
-		case textparse.EntryUnit:
-			// Handle metric unit
-			metricName, unit := parser.Unit()
-			level.Debug(logger).Log("msg", "found metric unit", "metric", string(metricName), "unit", unit)
-
 		case textparse.EntrySeries:
-			// Handle series data
 			_ = parser.Metric(&lset)
-
 			metricName := lset.Get(labels.MetricName)
 			if metricName == "" {
 				level.Debug(logger).Log("msg", "metric name not found in labels", "labels", lset.String())
@@ -181,10 +165,21 @@ func extractMetrics(body []byte, contentType string, logger log.Logger) (map[str
 
 			hash := lset.Hash()
 			series := Series{
-				Name:            metricName,
-				Labels:          lset.Copy(),
-				Type:            currentType,
-				HasCTZeroSample: true,
+				Name:   metricName,
+				Labels: lset.Copy(),
+				Type:   currentType,
+			}
+
+			_, ts, val := parser.Series()
+			t := defTime
+			if ts != nil {
+				t = *ts
+			}
+
+			ctMs := parser.CreatedTimestamp()
+			if ctMs != nil {
+				series.HasCTZeroSample = true
+				level.Debug(logger).Log("msg", "found CT zero sample", "metric", metricName, "ct", *ctMs)
 			}
 
 			metrics[metricName][hash] = series
@@ -192,10 +187,7 @@ func extractMetrics(body []byte, contentType string, logger log.Logger) (map[str
 			level.Debug(logger).Log("msg", "found series", "metric", metricName, "labels", lset.String(), "value", val, "timestamp", t, "has_ct_zero", series.HasCTZeroSample)
 
 		case textparse.EntryHistogram:
-			// Handle histogram data
-			_, t, h, fh := parser.Histogram()
 			_ = parser.Metric(&lset)
-
 			metricName := lset.Get(labels.MetricName)
 			if metricName == "" {
 				level.Debug(logger).Log("msg", "histogram metric name not found in labels", "labels", lset.String())
@@ -210,7 +202,19 @@ func extractMetrics(body []byte, contentType string, logger log.Logger) (map[str
 			series := Series{
 				Name:   metricName,
 				Labels: lset.Copy(),
-				Type:   "native_histogram",
+				Type:   "histogram",
+			}
+
+			_, ts, h, fh := parser.Histogram()
+			t := defTime
+			if ts != nil {
+				t = *ts
+			}
+
+			ctMs := parser.CreatedTimestamp()
+			if ctMs != nil {
+				series.HasCTZeroSample = true
+				level.Debug(logger).Log("msg", "found CT zero sample for histogram", "metric", metricName, "ct", *ctMs)
 			}
 
 			metrics[metricName][hash] = series
