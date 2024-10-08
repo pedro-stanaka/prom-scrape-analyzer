@@ -2,8 +2,8 @@ package main
 
 import (
 	"strconv"
-	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -29,46 +29,57 @@ var baseStyle = lipgloss.NewStyle().
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderForeground(lipgloss.Color("240"))
 
-type model struct {
+type seriesTable struct {
 	table     table.Model
+	spinner   spinner.Model
 	seriesMap scrape.SeriesMap
+
+	loading bool
+	err     error
 }
 
-func newModel(sm map[string]scrape.SeriesSet) *model {
+func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
 	tbl := table.New(
 		table.WithColumns([]table.Column{
 			{Title: "Name", Width: 80},
-			{Title: "Cardinality", Width: 20},
-			{Title: "Type", Width: 20},
+			{Title: "Cardinality", Width: 10},
+			{Title: "Type", Width: 10},
 			{Title: "Labels", Width: 80},
-			{Title: "Created TS", Width: 80},
+			{Title: "Created TS", Width: 40},
 		}),
 		table.WithFocused(true),
-		table.WithHeight(10),
+		table.WithHeight(height),
 	)
 
-	s := table.DefaultStyles()
-	s.Header = s.Header.
+	tblStyle := table.DefaultStyles()
+	tblStyle.Header = tblStyle.Header.
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).
 		BorderBottom(true).
 		Bold(false)
-	s.Selected = s.Selected.
+	tblStyle.Selected = tblStyle.Selected.
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
 		Bold(false)
-	tbl.SetStyles(s)
+	tbl.SetStyles(tblStyle)
 
-	m := &model{
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	m := &seriesTable{
 		table:     tbl,
 		seriesMap: sm,
+		spinner:   sp,
+		loading:   true,
 	}
-	m.updateRows()
 
 	return m
 }
 
-func (m *model) updateRows() {
+func (m *seriesTable) setData(sm scrape.SeriesMap) {
+	m.loading = false
+	m.seriesMap = sm
+
 	var rows []table.Row
 	for _, r := range m.seriesMap.AsRows() {
 		rows = append(rows, table.Row{
@@ -83,15 +94,22 @@ func (m *model) updateRows() {
 	m.table.SetRows(rows)
 }
 
-func (m *model) View() string {
+func (m *seriesTable) View() string {
+	if m.loading {
+		return m.spinner.View() + "\nLoading..."
+	}
+	if m.err != nil {
+		return baseStyle.Render("Exiting with error: " + m.err.Error())
+	}
+
 	return baseStyle.Render(m.table.View()) + "\n  " + m.table.HelpView() + "\n"
 }
 
-func (m *model) Init() tea.Cmd {
-	return nil
+func (m *seriesTable) Init() tea.Cmd {
+	return m.spinner.Tick
 }
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *seriesTable) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -113,6 +131,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.table, cmd = m.table.Update(msg)
 			return m, cmd
 		}
+	case spinner.TickMsg:
+		if m.loading {
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+	case error:
+		m.loading = false
+		m.err = msg
+		return m, tea.Quit
+	case scrape.SeriesMap:
+		m.setData(msg)
+		return m, nil
 	}
 	m.table, cmd = m.table.Update(msg)
 	return m, cmd
@@ -124,22 +154,34 @@ func registerCardinalityCommand(app *extkingpin.App) {
 	opts.addFlags(cmd)
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 		scrapeURL := opts.ScrapeURL
-		// TODO: enable passing this as a flag.
-		timeoutDuration := 10 * time.Second
+		timeoutDuration := opts.Timeout
 
-		level.Info(logger).Log("msg", "scraping", "url", scrapeURL, "timeout", timeoutDuration)
-		scraper := scrape.NewPromScraper(scrapeURL, timeoutDuration, logger)
-		metrics, err := scraper.Scrape()
-		if err != nil {
-			return err
-		}
+		metricTable := newModel(nil, opts.OutputHeight)
+		p := tea.NewProgram(metricTable)
+
+		// Create a channel to signal when scraping is complete
+		scrapeDone := make(chan struct{})
 
 		g.Add(func() error {
-			metricTable := newModel(metrics)
-			p := tea.NewProgram(metricTable)
-
 			_, err := p.Run()
 			return err
+		}, func(error) {
+			close(scrapeDone)
+		})
+
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "scraping", "url", scrapeURL, "timeout", timeoutDuration)
+			scraper := scrape.NewPromScraper(scrapeURL, timeoutDuration, logger)
+			metrics, err := scraper.Scrape()
+			if err != nil {
+				p.Send(err)
+				return err
+			}
+
+			// Send the scraped data to the UI
+			level.Info(logger).Log("msg", "scraping complete")
+			metricTable.setData(metrics)
+			return nil
 		}, func(error) {})
 
 		return nil

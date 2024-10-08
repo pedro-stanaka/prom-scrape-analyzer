@@ -18,10 +18,11 @@ import (
 )
 
 type PromScraper struct {
-	scrapeURL string
-	timeout   time.Duration
-	logger    log.Logger
-	series    map[string]SeriesSet
+	scrapeURL             string
+	timeout               time.Duration
+	logger                log.Logger
+	series                map[string]SeriesSet
+	lastScrapeContentType string
 }
 
 func NewPromScraper(scrapeURL string, timeout time.Duration, logger log.Logger) *PromScraper {
@@ -51,12 +52,18 @@ func (ps *PromScraper) Scrape() (map[string]SeriesSet, error) {
 		return nil, err
 	}
 
+	ps.lastScrapeContentType = contentType
+
 	metrics, err := ps.extractMetrics(body, contentType)
 	if err != nil {
 		return nil, err
 	}
 
 	return metrics, nil
+}
+
+func (ps *PromScraper) LastScrapeContentType() string {
+	return ps.lastScrapeContentType
 }
 
 func (ps *PromScraper) setupRequest() (*http.Request, error) {
@@ -194,7 +201,7 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 			series := Series{
 				Name:   metricName,
 				Labels: lset.Copy(),
-				Type:   "histogram",
+				Type:   "native_histogram",
 			}
 
 			_, ts, h, fh := parser.Histogram()
