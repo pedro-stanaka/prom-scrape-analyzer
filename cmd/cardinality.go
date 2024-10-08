@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
@@ -171,7 +172,18 @@ func registerCardinalityCommand(app *extkingpin.App) {
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "scraping", "url", scrapeURL, "timeout", timeoutDuration)
-			scraper := scrape.NewPromScraper(scrapeURL, timeoutDuration, logger)
+			maxSize, err := opts.MaxScrapeSizeBytes()
+			if err != nil {
+				err = errors.Wrapf(err, "failed to parse max scrape size")
+				p.Send(err)
+				return err
+			}
+			scraper := scrape.NewPromScraper(
+				scrapeURL,
+				logger,
+				scrape.WithTimeout(timeoutDuration),
+				scrape.WithMaxBodySize(maxSize),
+			)
 			metrics, err := scraper.Scrape()
 			if err != nil {
 				p.Send(err)

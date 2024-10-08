@@ -23,13 +23,43 @@ type PromScraper struct {
 	logger                log.Logger
 	series                map[string]SeriesSet
 	lastScrapeContentType string
+	maxBodySize           int64
 }
 
-func NewPromScraper(scrapeURL string, timeout time.Duration, logger log.Logger) *PromScraper {
+type scrapeOpts struct {
+	timeout     time.Duration
+	maxBodySize int64
+}
+
+type ScraperOption func(*scrapeOpts)
+
+func WithTimeout(timeout time.Duration) ScraperOption {
+	return func(opts *scrapeOpts) {
+		opts.timeout = timeout
+	}
+}
+
+func WithMaxBodySize(maxBodySize int64) ScraperOption {
+	return func(opts *scrapeOpts) {
+		opts.maxBodySize = maxBodySize
+	}
+}
+
+func NewPromScraper(scrapeURL string, logger log.Logger, opts ...ScraperOption) *PromScraper {
+	scOpts := &scrapeOpts{
+		timeout:     10 * time.Second,
+		maxBodySize: 10 * 1024 * 1024,
+	}
+
+	for _, opt := range opts {
+		opt(scOpts)
+	}
+
 	return &PromScraper{
-		scrapeURL: scrapeURL,
-		timeout:   timeout,
-		logger:    logger,
+		scrapeURL:   scrapeURL,
+		logger:      logger,
+		timeout:     scOpts.timeout,
+		maxBodySize: scOpts.maxBodySize,
 
 		series: make(map[string]SeriesSet),
 	}
@@ -87,16 +117,15 @@ func (ps *PromScraper) setupRequest() (*http.Request, error) {
 
 func (ps *PromScraper) readResponse(resp *http.Response) (string, []byte, error) {
 	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", nil, fmt.Errorf("server returned HTTP status %s", resp.Status)
 	}
 
-	// TODO: allow for a configurable limit.
-	bodySizeLimit := int64(10 * 1024 * 1024) // 10MB limit, adjust as needed
+	bodySizeLimit := ps.maxBodySize
 	var reader io.Reader = resp.Body
 
 	if resp.Header.Get("Content-Encoding") == "gzip" {

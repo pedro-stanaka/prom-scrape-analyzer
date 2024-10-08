@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/alecthomas/units"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 )
 
@@ -11,6 +12,14 @@ type Options struct {
 	OutputHeight  int
 	MaxScrapeSize string
 	Timeout       time.Duration
+}
+
+func (o *Options) MaxScrapeSizeBytes() (int64, error) {
+	val, err := units.ParseBase2Bytes(o.MaxScrapeSize)
+	if err != nil {
+		return 0, err
+	}
+	return int64(val), nil
 }
 
 func (o *Options) AddFlags(app extkingpin.AppClause) {
