@@ -25,6 +25,10 @@ func (o *cardinalityOptions) addFlags(app extkingpin.AppClause) {
 	o.AddFlags(app)
 }
 
+var baseStyle = lipgloss.NewStyle().
+	BorderStyle(lipgloss.NormalBorder()).
+	BorderForeground(lipgloss.Color("240"))
+
 type model struct {
 	table     table.Model
 	seriesMap scrape.SeriesMap
@@ -55,10 +59,13 @@ func newModel(sm map[string]scrape.SeriesSet) *model {
 		Bold(false)
 	tbl.SetStyles(s)
 
-	return &model{
+	m := &model{
 		table:     tbl,
 		seriesMap: sm,
 	}
+	m.updateRows()
+
+	return m
 }
 
 func (m *model) updateRows() {
@@ -77,8 +84,7 @@ func (m *model) updateRows() {
 }
 
 func (m *model) View() string {
-	m.updateRows()
-	return m.table.View()
+	return baseStyle.Render(m.table.View()) + "\n  " + m.table.HelpView() + "\n"
 }
 
 func (m *model) Init() tea.Cmd {
@@ -98,10 +104,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "q", "ctrl+c":
 			return m, tea.Quit
-		case "enter":
-			return m, tea.Batch(
-				tea.Printf("Let's go to %s!", m.table.SelectedRow()[1]),
-			)
 		case "down":
 			if m.table.Cursor() < len(m.table.Rows())-1 {
 				m.table, cmd = m.table.Update(msg)
