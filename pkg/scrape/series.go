@@ -1,6 +1,12 @@
 package scrape
 
-import "github.com/prometheus/prometheus/model/labels"
+import (
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/prometheus/prometheus/model/labels"
+)
 
 type Series struct {
 	Name             string
@@ -34,4 +40,65 @@ func (s SeriesSet) MetricTypeString() string {
 		}
 	}
 	return typeStr
+}
+
+func (s SeriesSet) CreatedTS() int64 {
+	for _, v := range s {
+		return v.CreatedTimestamp
+	}
+	return 0
+}
+
+func (s SeriesSet) LabelNames() string {
+	if len(s) == 0 {
+		return ""
+	}
+	labelSet := make(map[string]struct{})
+	for _, v := range s {
+		for _, l := range v.Labels {
+			if l.Name != "__name__" {
+				labelSet[l.Name] = struct{}{}
+			}
+		}
+	}
+	lbls := make([]string, 0, len(labelSet))
+	for label := range labelSet {
+		lbls = append(lbls, label)
+	}
+	return strings.Join(lbls, "|")
+}
+
+type SeriesMap map[string]SeriesSet
+
+type SeriesInfo struct {
+	Name        string
+	Cardinality int
+	Type        string
+	Labels      string
+	CreatedTS   string
+}
+
+func (s SeriesMap) AsRows() []SeriesInfo {
+	var rows []SeriesInfo
+	for name, s := range s {
+		createdTs := int64(0)
+		if len(s) > 0 {
+			createdTs = int64(int(s.CreatedTS()))
+		}
+		createdTsStr := "_empty_"
+		if createdTs > 0 {
+			createdTsStr = time.UnixMilli(createdTs).String()
+		}
+		rows = append(rows, SeriesInfo{
+			Name:        name,
+			Cardinality: s.Cardinality(),
+			Type:        s.MetricTypeString(),
+			Labels:      s.LabelNames(),
+			CreatedTS:   createdTsStr,
+		})
+	}
+
+	slices.SortFunc(rows, func(i, j SeriesInfo) int { return (i.Cardinality - j.Cardinality) * -1 })
+
+	return rows
 }
