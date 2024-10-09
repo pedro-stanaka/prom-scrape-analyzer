@@ -5,12 +5,17 @@ GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
-BINARY_NAME=prom-scrape-analyzer
+BINARY_NAME=prom-scrape-analyzer-$(GOOS)-$(GOARCH)
+VERSION=0.1.0
+BUILD_FLAGS=-ldflags "-X main.version=$(VERSION) -s -w"
+GOARCH=$(shell go env GOARCH)
+GOOS=$(shell go env GOOS)
+CGO_ENABLED=0
 
 all: test build
 
 build:
-	$(GOBUILD) -o $(BINARY_NAME) ./cmd/...
+	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) $(BUILD_FLAGS) -o $(BINARY_NAME) ./cmd/...
 
 test:
 	$(GOTEST) -v ./...
