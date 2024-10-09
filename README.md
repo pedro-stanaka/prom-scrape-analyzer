@@ -3,6 +3,8 @@
 Prom Scrape Analyzer is a powerful companion tool for Observability professionals,
 designed to inspect Prometheus scrape endpoints and provide valuable insights into your monitoring setup.
 
+![Demo GIF](docs/demo.gif)
+
 ## Motivation
 
 This project was born out of two main desires:
