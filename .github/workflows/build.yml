@@ -1,0 +1,49 @@
+name: Build and Publish
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build and Publish
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Build
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        go build -v -o prom-scrape-analyzer-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/...
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: prom-scrape-analyzer-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: prom-scrape-analyzer-${{ matrix.goos }}-${{ matrix.goarch }}
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: prom-scrape-analyzer-${{ matrix.goos }}-${{ matrix.goarch }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
