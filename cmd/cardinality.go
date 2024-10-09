@@ -35,15 +35,16 @@ type seriesTable struct {
 	spinner   spinner.Model
 	seriesMap scrape.SeriesMap
 
-	loading bool
-	err     error
+	loading   bool
+	err       error
+	infoTitle string
 }
 
 func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
 	tbl := table.New(
 		table.WithColumns([]table.Column{
 			{Title: "Name", Width: 80},
-			{Title: "Cardinality", Width: 10},
+			{Title: "Cardinality", Width: 16},
 			{Title: "Type", Width: 10},
 			{Title: "Labels", Width: 80},
 			{Title: "Created TS", Width: 40},
@@ -77,9 +78,10 @@ func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
 	return m
 }
 
-func (m *seriesTable) setData(sm scrape.SeriesMap) {
+func (m *seriesTable) setData(sr *scrape.Result) {
 	m.loading = false
-	m.seriesMap = sm
+	m.seriesMap = sr.Series
+	m.infoTitle = m.formatInfoTitle(sr)
 
 	var rows []table.Row
 	for _, r := range m.seriesMap.AsRows() {
@@ -103,7 +105,7 @@ func (m *seriesTable) View() string {
 		return baseStyle.Render("Exiting with error: " + m.err.Error())
 	}
 
-	return baseStyle.Render(m.table.View()) + "\n  " + m.table.HelpView() + "\n"
+	return baseStyle.Render(m.table.View()) + "\n  " + m.table.HelpView() + "\n" + m.infoTitle
 }
 
 func (m *seriesTable) Init() tea.Cmd {
@@ -141,12 +143,16 @@ func (m *seriesTable) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.err = msg
 		return m, tea.Quit
-	case scrape.SeriesMap:
+	case *scrape.Result:
 		m.setData(msg)
 		return m, nil
 	}
 	m.table, cmd = m.table.Update(msg)
 	return m, cmd
+}
+
+func (m *seriesTable) formatInfoTitle(sr *scrape.Result) string {
+	return "Scrape used content type: " + sr.UsedContentType
 }
 
 func registerCardinalityCommand(app *extkingpin.App) {

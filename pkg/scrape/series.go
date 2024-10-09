@@ -70,6 +70,11 @@ func (s SeriesSet) LabelNames() string {
 
 type SeriesMap map[string]SeriesSet
 
+type Result struct {
+	Series          SeriesMap
+	UsedContentType string
+}
+
 type SeriesInfo struct {
 	Name        string
 	Cardinality int

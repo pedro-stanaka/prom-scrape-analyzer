@@ -65,7 +65,7 @@ func NewPromScraper(scrapeURL string, logger log.Logger, opts ...ScraperOption) 
 	}
 }
 
-func (ps *PromScraper) Scrape() (map[string]SeriesSet, error) {
+func (ps *PromScraper) Scrape() (*Result, error) {
 	req, err := ps.setupRequest()
 	if err != nil {
 		return nil, err
@@ -89,7 +89,10 @@ func (ps *PromScraper) Scrape() (map[string]SeriesSet, error) {
 		return nil, err
 	}
 
-	return metrics, nil
+	return &Result{
+		Series:          metrics,
+		UsedContentType: contentType,
+	}, nil
 }
 
 func (ps *PromScraper) LastScrapeContentType() string {
