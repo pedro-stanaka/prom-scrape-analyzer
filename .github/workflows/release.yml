@@ -64,4 +64,4 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           files: ./prom-scrape-analyzer-*.zip
-          release-tag: ${{ github.ref }}
+          release-tag: ${{ github.ref_name }}
