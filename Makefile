@@ -32,6 +32,9 @@ deps:
 	$(GOGET) ./...
 	$(GOMOD) tidy
 
+lint:
+	golangci-lint run --fix --print-resources-usage ./...
+
 # Cross compilation
 build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_NAME)_linux -v ./cmd/main.go

@@ -1,0 +1,61 @@
+# This file contains all available configuration options
+# with their default values.
+
+# options for analysis running
+run:
+  # timeout for analysis, e.g. 30s, 5m, default is 1m
+  timeout: 5m
+
+  # exit code when at least one issue was found, default is 1
+  issues-exit-code: 1
+
+# output configuration options
+output:
+  # The formats used to render issues.
+  formats:
+    - format: colored-line-number
+      path: stdout
+
+  # print lines of code with issue, default is true
+  print-issued-lines: true
+
+  # print linter name in the end of issue text, default is true
+  print-linter-name: true
+
+linters:
+  enable:
+    # Sorted alphabetically.
+    - errcheck
+    - goconst
+    - godot
+    - gofmt
+    - goimports
+    - gci
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - typecheck
+    - unparam
+    - unused
+    - promlinter
+    - lll
+
+linters-settings:
+  errcheck:
+    # List of functions to exclude from checking, where each entry is a single function to exclude.
+    exclude-functions:
+      - (github.com/go-kit/log.Logger).Log
+      - fmt.Fprintln
+      - fmt.Fprint
+  misspell:
+    locale: US
+  goconst:
+    min-occurrences: 5
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/pedro-stanaka/prom-scrape-analyzer)
+

@@ -159,7 +159,14 @@ func registerCardinalityCommand(app *extkingpin.App) {
 	cmd := app.Command("cardinality", "Analyze the cardinality of a Prometheus scrape job.")
 	opts := &cardinalityOptions{}
 	opts.addFlags(cmd)
-	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+	cmd.Setup(func(
+		g *run.Group,
+		logger log.Logger,
+		reg *prometheus.Registry,
+		_ opentracing.Tracer,
+		_ <-chan struct{},
+		_ bool,
+	) error {
 		scrapeURL := opts.ScrapeURL
 		timeoutDuration := opts.Timeout
 

@@ -1,4 +1,4 @@
-name: Build multi-platform binaries
+name: Check build
 
 on:
   pull_request:
@@ -10,11 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [ linux, windows, darwin ]
+        goos: [ linux, darwin ]
         goarch: [ amd64, arm64 ]
-        exclude:
-          - goos: windows
-            goarch: arm64
     steps:
       - uses: actions/checkout@v4
 
@@ -29,39 +26,3 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ./prom-scrape-analyzer-*
-
-  list-artifacts:
-    name: List artifacts
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: build-artifacts*
-          merge-multiple: true
-      - name: Zip files
-        env:
-          VERSION: v0.0.1
-        run: |
-          for file in prom-scrape-analyzer-*; do
-            if [[ $file == *windows* ]]; then
-              ext=".exe"
-            else
-              ext=""
-            fi
-            os_arch=$(echo $file | sed -E 's/prom-scrape-analyzer-(.+)/\1/')
-            mkdir -p "release-$os_arch"
-            cp "$file" "release-$os_arch/prom-scrape-analyzer$ext"
-            cp README.md "release-$os_arch/"
-            echo "${VERSION}" > "release-$os_arch/VERSION"
-            zip -r "prom-scrape-analyzer-${VERSION}-$os_arch.zip" "release-$os_arch"
-          done
-          ls -lah prom-scrape-analyzer-*.zip
