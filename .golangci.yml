@@ -30,6 +30,7 @@ linters:
     - godot
     - gofmt
     - goimports
+    - gci
     - gosimple
     - govet
     - ineffassign
@@ -39,6 +40,7 @@ linters:
     - unparam
     - unused
     - promlinter
+    - lll
 
 linters-settings:
   errcheck:
@@ -51,3 +53,9 @@ linters-settings:
     locale: US
   goconst:
     min-occurrences: 5
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/pedro-stanaka/prom-scrape-analyzer)
+

@@ -215,7 +215,14 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 
 			metrics[metricName][hash] = series
 
-			level.Debug(ps.logger).Log("msg", "found series", "metric", metricName, "labels", lset.String(), "type", currentType, "timestamp", t, "has_ct_zero", series.CreatedTimestamp != 0)
+			level.Debug(ps.logger).Log(
+				"msg", "found series",
+				"metric", metricName,
+				"labels", lset.String(),
+				"type", currentType,
+				"timestamp", t,
+				"has_ct_zero", series.CreatedTimestamp != 0,
+			)
 
 		case textparse.EntryHistogram:
 			_ = parser.Metric(&lset)
@@ -245,15 +252,33 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 			ctMs := parser.CreatedTimestamp()
 			if ctMs != nil {
 				series.CreatedTimestamp = *ctMs
-				level.Debug(ps.logger).Log("msg", "found CT zero sample for histogram", "metric", metricName, "ct", *ctMs)
+				level.Debug(ps.logger).Log(
+					"msg", "found CT zero sample for histogram",
+					"metric", metricName,
+					"ct", *ctMs,
+				)
 			}
 
 			metrics[metricName][hash] = series
 
 			if h != nil {
-				level.Debug(ps.logger).Log("msg", "found histogram", "metric", metricName, "labels", lset.String(), "type", "histogram", "timestamp", t, "has_ct_zero", series.CreatedTimestamp != 0)
+				level.Debug(ps.logger).Log(
+					"msg", "found histogram",
+					"metric", metricName,
+					"labels", lset.String(),
+					"type", "histogram",
+					"timestamp", t,
+					"has_ct_zero", series.CreatedTimestamp != 0,
+				)
 			} else if fh != nil {
-				level.Debug(ps.logger).Log("msg", "found float histogram", "metric", metricName, "labels", lset.String(), "type", "float_histogram", "timestamp", t, "has_ct_zero", series.CreatedTimestamp != 0)
+				level.Debug(ps.logger).Log(
+					"msg", "found float histogram",
+					"metric", metricName,
+					"labels", lset.String(),
+					"type", "float_histogram",
+					"timestamp", t,
+					"has_ct_zero", series.CreatedTimestamp != 0,
+				)
 			}
 
 		default:
