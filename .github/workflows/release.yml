@@ -1,12 +1,12 @@
-name: Build multi-platform binaries
+name: Build an release binaries
 
 on:
-  pull_request:
-    branches: [ main ]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build:
-    name: Build
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -24,11 +24,7 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Build
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: |
-          make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+        run: make build GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -36,20 +32,19 @@ jobs:
           name: build-artifacts-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ./prom-scrape-analyzer-*
 
-  list-artifacts:
-    name: List artifacts
+  publish:
     runs-on: ubuntu-latest
     needs: build
     steps:
       - uses: actions/checkout@v4
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
+        name: Download build artifacts
         with:
           pattern: build-artifacts*
           merge-multiple: true
-      - name: Zip files
+      - name: Zip final release files
         env:
-          VERSION: v0.0.1
+          VERSION: ${{ github.ref_name }}
         run: |
           for file in prom-scrape-analyzer-*; do
             if [[ $file == *windows* ]]; then
@@ -61,7 +56,12 @@ jobs:
             mkdir -p "release-$os_arch"
             cp "$file" "release-$os_arch/prom-scrape-analyzer$ext"
             cp README.md "release-$os_arch/"
-            echo "${VERSION}" > "release-$os_arch/VERSION"
-            zip -r "prom-scrape-analyzer-${VERSION}-$os_arch.zip" "release-$os_arch"
+            echo "$VERSION" > "release-$os_arch/VERSION"
+            zip -r "prom-scrape-analyzer-$VERSION-$os_arch.zip" "release-$os_arch"
           done
-          ls -lah prom-scrape-analyzer-*.zip
+      - name: Upload Release Asset
+        uses: AButler/upload-release-assets@v3.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          files: ./prom-scrape-analyzer-*.zip
+          release-tag: ${{ github.ref }}
