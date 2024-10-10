@@ -23,7 +23,10 @@ for creating an intuitive and interactive command-line interface.
 - [x] Support for latest features like Created Timestamps and Native Histograms, showing them as separate columns.
 
 ## Planned Features
+- [ ] Allow to select a specific metric to inspect, and show its series.
+- [ ] Improve TUI with filtering, sorting and other features.
 - [ ] Watch mode, to see how cardinality and churn evolve over time.
+- [ ] For native histograms, show the bucket boundaries and counts (if possible, chart it).
 
 ## Getting Started
 
