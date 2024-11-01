@@ -1,6 +1,7 @@
 package scrape
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -68,6 +69,57 @@ func (s SeriesSet) LabelNames() string {
 	return strings.Join(lbls, "|")
 }
 
+func (s SeriesSet) LabelStats() LabelStatsSlice {
+	if len(s) == 0 {
+		return nil
+	}
+	labelValueSet := make(map[string]map[string]struct{})
+
+	for _, v := range s {
+		for _, l := range v.Labels {
+			if l.Name != "__name__" {
+				// Initialize the inner map if it doesn't exist
+				if _, exists := labelValueSet[l.Name]; !exists {
+					labelValueSet[l.Name] = make(map[string]struct{})
+				}
+				// Add the value to the set
+				labelValueSet[l.Name][l.Value] = struct{}{}
+			}
+		}
+	}
+
+	var stats []LabelStats
+	for label, valueSet := range labelValueSet {
+		stats = append(stats, LabelStats{
+			Name:           label,
+			DistinctValues: uint(len(valueSet)), // Count unique values
+		})
+	}
+	return stats
+}
+
+type LabelStats struct {
+	Name           string
+	DistinctValues uint
+}
+
+func (l LabelStats) String() string {
+	return fmt.Sprintf("%s(%d)", l.Name, l.DistinctValues)
+}
+
+type LabelStatsSlice []LabelStats
+
+func (l LabelStatsSlice) String() string {
+	var strBuf strings.Builder
+	for i, ls := range l {
+		if i > 0 {
+			strBuf.WriteString("|")
+		}
+		strBuf.WriteString(ls.String())
+	}
+	return strBuf.String()
+}
+
 type SeriesMap map[string]SeriesSet
 
 type Result struct {
@@ -94,11 +146,13 @@ func (s SeriesMap) AsRows() []SeriesInfo {
 		if createdTs > 0 {
 			createdTsStr = time.UnixMilli(createdTs).String()
 		}
+		lblStats := s.LabelStats()
+		slices.SortFunc(lblStats, func(i, j LabelStats) int { return (int(i.DistinctValues) - int(j.DistinctValues)) * -1 })
 		rows = append(rows, SeriesInfo{
 			Name:        name,
 			Cardinality: s.Cardinality(),
 			Type:        s.MetricTypeString(),
-			Labels:      s.LabelNames(),
+			Labels:      lblStats.String(),
 			CreatedTS:   createdTsStr,
 		})
 	}
