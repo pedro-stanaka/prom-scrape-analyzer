@@ -43,11 +43,11 @@ type seriesTable struct {
 func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
 	tbl := table.New(
 		table.WithColumns([]table.Column{
-			{Title: "Name", Width: 80},
+			{Title: "Name", Width: 60},
 			{Title: "Cardinality", Width: 16},
 			{Title: "Type", Width: 10},
 			{Title: "Labels", Width: 80},
-			{Title: "Created TS", Width: 40},
+			{Title: "Created TS", Width: 50},
 		}),
 		table.WithFocused(true),
 		table.WithHeight(height),
