@@ -128,7 +128,6 @@ func (ps *PromScraper) readResponse(resp *http.Response) (string, []byte, error)
 		return "", nil, fmt.Errorf("server returned HTTP status %s", resp.Status)
 	}
 
-	bodySizeLimit := ps.maxBodySize
 	var reader io.Reader = resp.Body
 
 	if resp.Header.Get("Content-Encoding") == "gzip" {
@@ -140,14 +139,18 @@ func (ps *PromScraper) readResponse(resp *http.Response) (string, []byte, error)
 		defer reader.(*gzip.Reader).Close()
 	}
 
-	body, err := io.ReadAll(io.LimitReader(reader, bodySizeLimit))
+	body, err := io.ReadAll(io.LimitReader(reader, ps.maxBodySize))
 	if err != nil {
 		return "", nil, err
 	}
 
-	if int64(len(body)) >= bodySizeLimit {
-		level.Warn(ps.logger).Log("msg", "response body size limit exceeded")
-		return "", nil, fmt.Errorf("response body size limit exceeded")
+	if int64(len(body)) >= ps.maxBodySize {
+		level.Warn(ps.logger).Log(
+			"msg", "response body size limit exceeded",
+			"limit_bytes", ps.maxBodySize,
+			"body_size", len(body),
+		)
+		return "", nil, fmt.Errorf("response body size exceeded limit of %d bytes", ps.maxBodySize)
 	}
 
 	return resp.Header.Get("Content-Type"), body, nil

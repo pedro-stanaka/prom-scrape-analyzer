@@ -18,7 +18,7 @@ build:
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) $(BUILD_FLAGS) -o $(BINARY_NAME) ./cmd/...
 
 test:
-	$(GOTEST) -v ./...
+	$(GOTEST) ./...
 
 clean:
 	$(GOCLEAN)
@@ -32,7 +32,7 @@ deps:
 	$(GOGET) ./...
 	$(GOMOD) tidy
 
-lint:
+lint: deps
 	golangci-lint run --fix --print-resources-usage ./...
 
 # Cross compilation

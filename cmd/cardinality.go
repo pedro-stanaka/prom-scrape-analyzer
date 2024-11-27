@@ -2,6 +2,7 @@ package main
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
@@ -184,13 +185,21 @@ func registerCardinalityCommand(app *extkingpin.App) {
 		})
 
 		g.Add(func() error {
-			level.Info(logger).Log("msg", "scraping", "url", scrapeURL, "timeout", timeoutDuration)
 			maxSize, err := opts.MaxScrapeSizeBytes()
 			if err != nil {
 				err = errors.Wrapf(err, "failed to parse max scrape size")
 				p.Send(err)
 				return err
 			}
+
+			level.Info(logger).Log(
+				"msg", "scraping",
+				"url", scrapeURL,
+				"timeout", timeoutDuration,
+				"max_size", maxSize,
+			)
+
+			t0 := time.Now()
 			scraper := scrape.NewPromScraper(
 				scrapeURL,
 				logger,
@@ -204,8 +213,8 @@ func registerCardinalityCommand(app *extkingpin.App) {
 			}
 
 			// Send the scraped data to the UI
-			level.Info(logger).Log("msg", "scraping complete")
-			metricTable.setData(metrics)
+			level.Info(logger).Log("msg", "scraping complete", "duration", time.Since(t0))
+			p.Send(metrics)
 			return nil
 		}, func(error) {})
 
