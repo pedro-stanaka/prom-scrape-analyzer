@@ -32,7 +32,7 @@ deps:
 	$(GOGET) ./...
 	$(GOMOD) tidy
 
-lint:
+lint: deps
 	golangci-lint run --fix --print-resources-usage ./...
 
 # Cross compilation

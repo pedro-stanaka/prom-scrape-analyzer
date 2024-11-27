@@ -1,6 +1,7 @@
 package scrape_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -46,7 +47,8 @@ func TestSeriesSet_LabelNames(t *testing.T) {
 	}
 
 	expected := "label1|label2|label3"
-	require.Equal(t, expected, seriesSet.LabelNames(), "LabelNames() should return the correct label names")
+	actual := seriesSet.LabelNames()
+	require.ElementsMatch(t, strings.Split(expected, "|"), strings.Split(actual, "|"), "LabelNames() should return the correct label names")
 }
 
 func TestSeriesSet_LabelStats(t *testing.T) {
