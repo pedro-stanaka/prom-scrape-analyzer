@@ -1,11 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/cursor"
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/go-kit/log"
@@ -31,14 +37,42 @@ var baseStyle = lipgloss.NewStyle().
 	BorderStyle(lipgloss.NormalBorder()).
 	BorderForeground(lipgloss.Color("240"))
 
-type seriesTable struct {
-	table     table.Model
-	spinner   spinner.Model
-	seriesMap scrape.SeriesMap
+var tableHelp = help.New().ShortHelpView([]key.Binding{
+	key.NewBinding(
+		key.WithKeys("up", "k"),
+		key.WithHelp("↑/k", "up"),
+	),
+	key.NewBinding(
+		key.WithKeys("down", "j"),
+		key.WithHelp("↓/j", "down"),
+	),
+	key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "search metrics"),
+	),
+})
+var searchHelp = help.New().ShortHelpView([]key.Binding{
+	key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter:", "explore table"),
+	),
+	key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc:", "clear search"),
+	),
+})
 
-	loading   bool
-	err       error
-	infoTitle string
+var noFiltering func(info scrape.SeriesInfo) bool = nil
+
+type seriesTable struct {
+	table            table.Model
+	spinner          spinner.Model
+	searchInput      textinput.Model
+	seriesMap        scrape.SeriesMap
+	loading          bool
+	searchingMetrics bool
+	err              error
+	infoTitle        string
 }
 
 func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
@@ -69,30 +103,34 @@ func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	ti := textinput.New()
+	ti.Placeholder = "Metric name"
+
 	m := &seriesTable{
-		table:     tbl,
-		seriesMap: sm,
-		spinner:   sp,
-		loading:   true,
+		table:            tbl,
+		seriesMap:        sm,
+		spinner:          sp,
+		searchInput:      ti,
+		loading:          true,
+		searchingMetrics: false,
 	}
 
 	return m
 }
 
-func (m *seriesTable) setData(sr *scrape.Result) {
-	m.loading = false
-	m.seriesMap = sr.Series
-	m.infoTitle = m.formatInfoTitle(sr)
-
+func (m *seriesTable) setTableRows(filter func(info scrape.SeriesInfo) bool) {
 	var rows []table.Row
 	for _, r := range m.seriesMap.AsRows() {
-		rows = append(rows, table.Row{
-			r.Name,
-			strconv.Itoa(r.Cardinality),
-			r.Type,
-			r.Labels,
-			r.CreatedTS,
-		})
+		if filter == nil || filter(r) {
+			rows = append(rows, table.Row{
+				r.Name,
+				strconv.Itoa(r.Cardinality),
+				r.Type,
+				r.Labels,
+				r.CreatedTS,
+			})
+		}
 	}
 
 	m.table.SetRows(rows)
@@ -106,7 +144,35 @@ func (m *seriesTable) View() string {
 		return baseStyle.Render("Exiting with error: " + m.err.Error())
 	}
 
-	return baseStyle.Render(m.table.View()) + "\n  " + m.table.HelpView() + "\n" + m.infoTitle
+	var view strings.Builder
+	if m.searchingMetrics {
+		view.WriteString(baseStyle.Render(m.searchInput.View()))
+	}
+
+	view.WriteString("\n")
+	view.WriteString(baseStyle.Render(m.table.View()))
+
+	view.WriteString("\n")
+	if m.searchInput.Focused() {
+		view.WriteString(searchHelp)
+	} else {
+		view.WriteString(tableHelp)
+	}
+
+	if m.searchingMetrics {
+		total := len(m.seriesMap)
+		filtered := len(m.table.Rows())
+		view.WriteString("\n")
+		view.WriteString(fmt.Sprintf("Showing %d out of %d metrics", filtered, total))
+	} else {
+		total := len(m.seriesMap)
+		view.WriteString("\n")
+		view.WriteString(fmt.Sprintf("Total metrics: %d", total))
+		view.WriteString("\n")
+		view.WriteString(m.infoTitle)
+	}
+
+	return view.String()
 }
 
 func (m *seriesTable) Init() tea.Cmd {
@@ -118,22 +184,8 @@ func (m *seriesTable) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc":
-			if m.table.Focused() {
-				m.table.Blur()
-			} else {
-				m.table.Focus()
-			}
-		case "q", "ctrl+c":
+		case "ctrl+c":
 			return m, tea.Quit
-		case "down":
-			if m.table.Cursor() < len(m.table.Rows())-1 {
-				m.table, cmd = m.table.Update(msg)
-			}
-			return m, cmd
-		case "up":
-			m.table, cmd = m.table.Update(msg)
-			return m, cmd
 		}
 	case spinner.TickMsg:
 		if m.loading {
@@ -145,10 +197,106 @@ func (m *seriesTable) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg
 		return m, tea.Quit
 	case *scrape.Result:
-		m.setData(msg)
+		m.loading = false
+		m.seriesMap = msg.Series
+		m.infoTitle = m.formatInfoTitle(msg)
+		m.setTableRows(noFiltering)
 		return m, nil
 	}
+
+	if m.searchingMetrics {
+		return m.updateWhileSearchingMetrics(msg)
+	} else {
+		return m.updateWhileBrowsingTable(msg)
+	}
+}
+
+func (m *seriesTable) updateWhileBrowsingTable(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q":
+			return m, tea.Quit
+		case "esc":
+			if m.table.Focused() {
+				m.table.Blur()
+			} else {
+				m.table.Focus()
+			}
+		case "down":
+			if m.table.Cursor() < len(m.table.Rows())-1 {
+				m.table, cmd = m.table.Update(msg)
+			}
+			return m, cmd
+		case "up":
+			m.table, cmd = m.table.Update(msg)
+			return m, cmd
+		case "/":
+			m.searchingMetrics = true
+			m.searchInput.SetCursor(int(cursor.CursorBlink))
+			m.searchInput.CursorEnd()
+			return m, m.searchInput.Focus()
+		}
+	}
+
 	m.table, cmd = m.table.Update(msg)
+	return m, cmd
+}
+
+func (m *seriesTable) updateWhileSearchingMetrics(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter":
+			// Allow exploring the filtered table
+			m.searchInput.SetCursor(int(cursor.CursorHide))
+			m.searchInput.Blur()
+			m.table.Focus()
+			return m, cmd
+		case "esc":
+			// Reset the search input and table back to their initial state
+			m.searchInput.Reset()
+			m.searchInput.Blur()
+			m.setTableRows(noFiltering)
+
+			// Hide the search input and restore control to the table
+			m.searchingMetrics = false
+			m.table.Focus()
+			return m, cmd
+		default:
+			if m.searchInput.Focused() {
+				// Update the search value with the key press from this msg
+				m.searchInput, cmd = m.searchInput.Update(msg)
+
+				oldRowCount := len(m.table.Rows())
+				if len(m.searchInput.Value()) > 0 {
+					m.setTableRows(func(info scrape.SeriesInfo) bool {
+						return strings.Contains(info.Name, m.searchInput.Value())
+					})
+				} else {
+					// Show all rows
+					m.setTableRows(noFiltering)
+				}
+
+				if oldRowCount != len(m.table.Rows()) {
+					//Reset the selected row since the current index might exceed the filtered count
+					m.table.SetCursor(0)
+				}
+
+				return m, cmd
+			}
+		}
+	}
+
+	if m.table.Focused() {
+		// Allow navigating the filtered table
+		return m.updateWhileBrowsingTable(msg)
+	}
+
+	m.searchInput, cmd = m.searchInput.Update(msg)
 	return m, cmd
 }
 
