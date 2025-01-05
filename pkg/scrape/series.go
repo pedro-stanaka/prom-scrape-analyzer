@@ -147,7 +147,13 @@ func (s SeriesMap) AsRows() []SeriesInfo {
 			createdTsStr = time.UnixMilli(createdTs).String()
 		}
 		lblStats := s.LabelStats()
-		slices.SortFunc(lblStats, func(i, j LabelStats) int { return (int(i.DistinctValues) - int(j.DistinctValues)) * -1 })
+		slices.SortFunc(lblStats, func(i, j LabelStats) int {
+			if d := (int(i.DistinctValues) - int(j.DistinctValues)) * -1; d != 0 {
+				return d
+			}
+			// Consistent sorting to avoid labels moving around after filtering on the same values
+			return strings.Compare(i.Name, j.Name)
+		})
 		rows = append(rows, SeriesInfo{
 			Name:        name,
 			Cardinality: s.Cardinality(),
@@ -157,7 +163,13 @@ func (s SeriesMap) AsRows() []SeriesInfo {
 		})
 	}
 
-	slices.SortFunc(rows, func(i, j SeriesInfo) int { return (i.Cardinality - j.Cardinality) * -1 })
+	slices.SortFunc(rows, func(i, j SeriesInfo) int {
+		if c := (i.Cardinality - j.Cardinality) * -1; c != 0 {
+			return c
+		}
+		// Consistent sorting to avoid rows moving around after filtering on the same values
+		return strings.Compare(i.Name, j.Name)
+	})
 
 	return rows
 }

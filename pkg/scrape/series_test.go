@@ -91,3 +91,26 @@ func TestSeriesSet_LabelStats(t *testing.T) {
 	sort.Slice(got, func(i, j int) bool { return got[i].Name < got[j].Name })
 	require.EqualValues(t, expected, got, "LabelStats() should return the correct label stats")
 }
+
+func TestSeriesSet_AsRowOrdering(t *testing.T) {
+	t.Parallel()
+	var seriesMap scrape.SeriesMap = make(map[string]scrape.SeriesSet)
+	seriesMap["series1"] = scrape.SeriesSet{
+		1: {Name: "series1", Labels: labels.Labels{{Name: "label1", Value: "foo"}}},
+	}
+	seriesMap["series2"] = scrape.SeriesSet{
+		1: {Name: "series2", Labels: labels.Labels{{Name: "label1", Value: "foo"}}},
+		2: {Name: "series2", Labels: labels.Labels{{Name: "label1", Value: "bar"}}},
+	}
+	seriesMap["series3"] = scrape.SeriesSet{
+		1: {Name: "series3", Labels: labels.Labels{{Name: "label1", Value: "foo"}}},
+		2: {Name: "series3", Labels: labels.Labels{{Name: "label1", Value: "bar"}}},
+	}
+
+	rows := seriesMap.AsRows()
+
+	require.Len(t, rows, 3, "AsRows() should return the correct number of rows")
+	require.Equal(t, "series2", rows[0].Name)
+	require.Equal(t, "series3", rows[1].Name)
+	require.Equal(t, "series1", rows[2].Name)
+}
