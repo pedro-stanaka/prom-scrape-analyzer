@@ -273,8 +273,9 @@ func (m *seriesTable) updateWhileSearchingMetrics(msg tea.Msg) (tea.Model, tea.C
 
 				oldRowCount := len(m.table.Rows())
 				if len(m.searchInput.Value()) > 0 {
+					v := strings.ToLower(m.searchInput.Value())
 					m.setTableRows(func(info scrape.SeriesInfo) bool {
-						return strings.Contains(info.Name, m.searchInput.Value())
+						return strings.Contains(strings.ToLower(info.Name), v)
 					})
 				} else {
 					// Show all rows

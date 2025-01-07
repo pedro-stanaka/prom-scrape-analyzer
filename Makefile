@@ -42,10 +42,7 @@ build-linux:
 build-windows:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GOBUILD) -o $(BINARY_NAME).exe -v ./cmd/main.go
 
-build-mac-amd64:
+build-mac:
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GOBUILD) -o $(BINARY_NAME)_mac -v ./cmd/main.go
-
-build-mac-arm64:
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GOBUILD) -o $(BINARY_NAME)_mac -v ./cmd/main.go
 
 .PHONY: all build test clean run deps build-linux build-windows build-mac
