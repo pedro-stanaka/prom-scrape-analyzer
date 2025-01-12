@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
+	"github.com/pedro-stanaka/prom-scrape-analyzer/cmd/internal"
 	"github.com/pedro-stanaka/prom-scrape-analyzer/pkg/scrape"
 )
 
@@ -50,11 +51,15 @@ var tableHelp = help.New().ShortHelpView([]key.Binding{
 		key.WithKeys("/"),
 		key.WithHelp("/", "search metrics"),
 	),
+	key.NewBinding(
+		key.WithKeys("enter", "v"),
+		key.WithHelp("v/↵", "view series in text editor"),
+	),
 })
 var searchHelp = help.New().ShortHelpView([]key.Binding{
 	key.NewBinding(
 		key.WithKeys("enter"),
-		key.WithHelp("enter:", "explore table"),
+		key.WithHelp("↵", "explore table"),
 	),
 	key.NewBinding(
 		key.WithKeys("esc"),
@@ -64,15 +69,19 @@ var searchHelp = help.New().ShortHelpView([]key.Binding{
 
 var noFiltering func(info scrape.SeriesInfo) bool = nil
 
+var flashDuration = 5 * time.Second
+
 type seriesTable struct {
 	table            table.Model
 	spinner          spinner.Model
 	searchInput      textinput.Model
 	seriesMap        scrape.SeriesMap
+	seriesScrapeText scrape.SeriesScrapeText
 	loading          bool
 	searchingMetrics bool
 	err              error
 	infoTitle        string
+	flashMsg         internal.TextFlash
 }
 
 func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
@@ -114,6 +123,7 @@ func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
 		searchInput:      ti,
 		loading:          true,
 		searchingMetrics: false,
+		flashMsg:         internal.TextFlash{},
 	}
 
 	return m
@@ -145,8 +155,17 @@ func (m *seriesTable) View() string {
 	}
 
 	var view strings.Builder
+
 	if m.searchingMetrics {
 		view.WriteString(baseStyle.Render(m.searchInput.View()))
+	}
+
+	flashText := m.flashMsg.View()
+	if flashText != "" {
+		if m.searchingMetrics {
+			view.WriteString("\n")
+		}
+		view.WriteString(flashText)
 	}
 
 	view.WriteString("\n")
@@ -192,6 +211,9 @@ func (m *seriesTable) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
+	case internal.UpdateTextFlashMsg:
+		m.flashMsg, cmd = m.flashMsg.Update(msg)
+		return m, cmd
 	case error:
 		m.loading = false
 		m.err = msg
@@ -199,6 +221,7 @@ func (m *seriesTable) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case *scrape.Result:
 		m.loading = false
 		m.seriesMap = msg.Series
+		m.seriesScrapeText = msg.SeriesScrapeText
 		m.infoTitle = m.formatInfoTitle(msg)
 		m.setTableRows(noFiltering)
 		return m, nil
@@ -232,6 +255,25 @@ func (m *seriesTable) updateWhileBrowsingTable(msg tea.Msg) (tea.Model, tea.Cmd)
 		case "up":
 			m.table, cmd = m.table.Update(msg)
 			return m, cmd
+		case "enter", "v":
+			selectedRow := m.table.SelectedRow()
+			metricName := selectedRow[0]
+			seriesText := m.seriesScrapeText[metricName]
+
+			infoFlash := m.flashMsg.Flash(
+				metricName+"'s series are now opened in your text editor... ",
+				internal.Info,
+				flashDuration,
+			)
+			displayErrFlash := func() tea.Msg {
+				// This blocks until the editor is closed, so it needs to be run in the background as a tea.Cmd
+				err := internal.ViewInEditor(seriesText)
+				if err != nil {
+					return m.flashMsg.Flash(err.Error(), internal.Error, flashDuration)()
+				}
+				return nil
+			}
+			return m, tea.Batch(infoFlash, displayErrFlash)
 		case "/":
 			m.searchingMetrics = true
 			m.searchInput.SetCursor(int(cursor.CursorBlink))
@@ -251,6 +293,11 @@ func (m *seriesTable) updateWhileSearchingMetrics(msg tea.Msg) (tea.Model, tea.C
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
+			if !m.searchInput.Focused() {
+				// enter should allow viewing metrics for the filtered row that's selected
+				return m.updateWhileBrowsingTable(msg)
+			}
+
 			// Allow exploring the filtered table
 			m.searchInput.SetCursor(int(cursor.CursorHide))
 			m.searchInput.Blur()
