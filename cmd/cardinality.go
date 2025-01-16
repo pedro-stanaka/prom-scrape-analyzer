@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -260,20 +262,30 @@ func (m *seriesTable) updateWhileBrowsingTable(msg tea.Msg) (tea.Model, tea.Cmd)
 			metricName := selectedRow[0]
 			seriesText := m.seriesScrapeText[metricName]
 
-			infoFlash := m.flashMsg.Flash(
-				metricName+"'s series are now opened in your text editor... ",
-				internal.Info,
-				flashDuration,
-			)
-			displayErrFlash := func() tea.Msg {
-				// This blocks until the editor is closed, so it needs to be run in the background as a tea.Cmd
-				err := internal.ViewInEditor(seriesText)
-				if err != nil {
-					return m.flashMsg.Flash(err.Error(), internal.Error, flashDuration)()
-				}
-				return nil
+			tmpFile := internal.CreateTempFileWithContent(seriesText)
+			if tmpFile == "" {
+				return m, m.flashMsg.Flash("Failed to create temporary file", internal.Error, flashDuration)
 			}
-			return m, tea.Batch(infoFlash, displayErrFlash)
+
+			editor := os.Getenv("EDITOR")
+			if editor == "" {
+				os.Remove(tmpFile)
+				return m, m.flashMsg.Flash("Please set the EDITOR environment variable", internal.Error, flashDuration)
+			}
+
+			// Run the editor and wait for it to complete
+			cmd := exec.Command(editor, tmpFile)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+
+			// Run the editor and clean up
+			err := cmd.Run()
+			os.Remove(tmpFile)
+			if err != nil {
+				return m, m.flashMsg.Flash("Failed to run editor: "+err.Error(), internal.Error, flashDuration)
+			}
+			return m, tea.Quit
 		case "/":
 			m.searchingMetrics = true
 			m.searchInput.SetCursor(int(cursor.CursorBlink))
