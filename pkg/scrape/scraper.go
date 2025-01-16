@@ -353,6 +353,21 @@ func (ps *PromScraper) extractMetricSeriesText(textScrapeResponse []byte) Series
 	// a metric's series are not on consecutive lines for histogram and summary metrics
 	// so a strings.Builder is kept in memory for each metric
 	metricLines := make(map[string]*strings.Builder)
+
+	// For native histograms, we need to map the base metric name to all its suffixes
+	histogramBaseMetrics := make(map[string]bool)
+
+	// First pass: identify histogram base metrics
+	for _, line := range lines {
+		if strings.HasPrefix(line, "# TYPE") {
+			parts := strings.Fields(line)
+			if len(parts) >= 4 && parts[3] == "histogram" {
+				histogramBaseMetrics[parts[2]] = true
+			}
+		}
+	}
+
+	// Second pass: collect all lines
 	for _, line := range lines {
 		if len(line) == 0 {
 			continue
@@ -372,10 +387,19 @@ func (ps *PromScraper) extractMetricSeriesText(textScrapeResponse []byte) Series
 			continue
 		}
 
-		sb, ok := metricLines[parsedMetric]
+		// For histogram metrics, also add the line to the base metric
+		baseMetric := parsedMetric
+		for suffix := range histogramBaseMetrics {
+			if strings.HasPrefix(parsedMetric, suffix+"_") {
+				baseMetric = suffix
+				break
+			}
+		}
+
+		sb, ok := metricLines[baseMetric]
 		if !ok {
 			sb = &strings.Builder{}
-			metricLines[parsedMetric] = sb
+			metricLines[baseMetric] = sb
 		}
 
 		sb.WriteString(line)
