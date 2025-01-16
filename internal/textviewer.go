@@ -1,53 +1,34 @@
 package internal
 
 import (
-	"bytes"
 	"os"
-	"os/exec"
-	"strings"
-
-	"github.com/pkg/errors"
+	"path/filepath"
 )
 
-func ViewInEditor(text string) error {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		return errors.New("Please define a text editor to use with the $EDITOR environment variable")
-	}
-
+// CreateTempFileWithContent creates a temporary file with the given content and returns its path.
+// The caller is responsible for removing the file when done.
+func CreateTempFileWithContent(content string) string {
 	tmpfile, err := os.CreateTemp("", "prom-scrape-analyzer-*.txt")
-	defer func() {
-		if tmpfile != nil {
-			_ = tmpfile.Close()
-			_ = os.Remove(tmpfile.Name())
-		}
-	}()
 	if err != nil {
-		return errors.Wrap(err, "failed to create temporary file to display text")
+		return ""
 	}
 
-	_, err = tmpfile.WriteString(text)
-	if err != nil {
-		return errors.Wrap(err, "failed to write text to temporary file")
+	if _, err := tmpfile.WriteString(content); err != nil {
+		tmpfile.Close()
+		os.Remove(tmpfile.Name())
+		return ""
 	}
 
-	args := strings.Split(editor, " ")
-	args = append(args, tmpfile.Name())
-
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	err = cmd.Run()
-	if err != nil {
-		return err
-	}
-	if stderr.Len() > 0 {
-		return errors.New(stderr.String())
+	if err := tmpfile.Sync(); err != nil {
+		tmpfile.Close()
+		os.Remove(tmpfile.Name())
+		return ""
 	}
 
-	return nil
+	if err := tmpfile.Close(); err != nil {
+		os.Remove(tmpfile.Name())
+		return ""
+	}
+
+	return filepath.Clean(tmpfile.Name())
 }
