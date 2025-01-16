@@ -22,7 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 
-	"github.com/pedro-stanaka/prom-scrape-analyzer/cmd/internal"
+	"github.com/pedro-stanaka/prom-scrape-analyzer/internal"
 	"github.com/pedro-stanaka/prom-scrape-analyzer/pkg/scrape"
 )
 
