@@ -247,6 +247,24 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 				continue
 			}
 
+			// Combined series belonging to the same classic histogram
+			// ex: the series elapsed_seconds_bucket, elapsed_seconds_count, elapsed_seconds_sum are tracked as elapsed_seconds
+			if currentType == "histogram" {
+				parts := strings.Split(metricName, "_")
+				if len(parts) > 1 {
+					metricName = strings.Join(parts[:len(parts)-1], "_")
+				}
+			}
+
+			// Combine series belonging to the same summary metric
+			// ex: the series elapsed_seconds, elapsed_seconds_count, elapsed_seconds_sum are tracked as elapsed_seconds
+			if currentType == "summary" {
+				parts := strings.Split(metricName, "_")
+				if len(parts) > 1 && (parts[len(parts)-1] == "count" || parts[len(parts)-1] == "sum") {
+					metricName = strings.Join(parts[:len(parts)-1], "_")
+				}
+			}
+
 			if _, ok := metrics[metricName]; !ok {
 				metrics[metricName] = make(SeriesSet)
 			}
@@ -280,8 +298,8 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 				"timestamp", t,
 				"has_ct_zero", series.CreatedTimestamp != 0,
 			)
-
 		case textparse.EntryHistogram:
+			// Processing solely for native histograms
 			_ = parser.Metric(&lset)
 			metricName := lset.Get(labels.MetricName)
 			if metricName == "" {
@@ -354,15 +372,15 @@ func (ps *PromScraper) extractMetricSeriesText(textScrapeResponse []byte) Series
 	// so a strings.Builder is kept in memory for each metric
 	metricLines := make(map[string]*strings.Builder)
 
-	// For native histograms, we need to map the base metric name to all its suffixes
-	histogramBaseMetrics := make(map[string]bool)
+	// For histograms and summaries, we need to map the base metric name to all its suffixes
+	baseMetrics := make(map[string]bool)
 
-	// First pass: identify histogram base metrics
+	// First pass: identify histogram and summary base metrics
 	for _, line := range lines {
 		if strings.HasPrefix(line, "# TYPE") {
 			parts := strings.Fields(line)
-			if len(parts) >= 4 && parts[3] == "histogram" {
-				histogramBaseMetrics[parts[2]] = true
+			if len(parts) >= 4 && (parts[3] == "histogram" || parts[3] == "summary") {
+				baseMetrics[parts[2]] = true
 			}
 		}
 	}
@@ -387,11 +405,11 @@ func (ps *PromScraper) extractMetricSeriesText(textScrapeResponse []byte) Series
 			continue
 		}
 
-		// For histogram metrics, also add the line to the base metric
+		// For histogram and summary metrics, also add the line to the base metric
 		baseMetric := parsedMetric
-		for suffix := range histogramBaseMetrics {
-			if strings.HasPrefix(parsedMetric, suffix+"_") {
-				baseMetric = suffix
+		for prefix := range baseMetrics {
+			if strings.HasPrefix(parsedMetric, prefix+"_") {
+				baseMetric = prefix
 				break
 			}
 		}
