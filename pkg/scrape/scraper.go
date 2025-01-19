@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -66,32 +68,89 @@ func NewPromScraper(scrapeURL string, logger log.Logger, opts ...ScraperOption) 
 }
 
 func (ps *PromScraper) Scrape() (*Result, error) {
-	req, err := ps.setupRequest()
-	if err != nil {
-		return nil, err
+	var (
+		seriesSet        map[string]SeriesSet
+		scrapeErr        error
+		seriesScrapeText SeriesScrapeText
+		textScrapeErr    error
+		wg               sync.WaitGroup
+	)
+
+	// First prioritize scraping PrometheusProto format for access to data about created timestamps and native histograms
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		req, err := ps.setupRequest([]config.ScrapeProtocol{
+			config.PrometheusProto,
+			config.OpenMetricsText1_0_0,
+			config.PrometheusText0_0_4,
+			config.OpenMetricsText0_0_1,
+		})
+		if err != nil {
+			return
+		}
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			scrapeErr = err
+			return
+		}
+		defer resp.Body.Close()
+
+		contentType, body, err := ps.readResponse(resp)
+		if err != nil {
+			scrapeErr = err
+			return
+		}
+		ps.lastScrapeContentType = contentType
+
+		seriesSet, scrapeErr = ps.extractMetrics(body, contentType)
+	}()
+
+	// If the above response is in proto format then it isn't in a human-readable format,
+	// so request a format known to be readable in case the user wants to view the series.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		textReq, err := ps.setupRequest([]config.ScrapeProtocol{
+			config.OpenMetricsText1_0_0,
+			config.PrometheusText0_0_4,
+			config.OpenMetricsText0_0_1,
+		})
+		if err != nil {
+			textScrapeErr = err
+			return
+		}
+		textResp, err := http.DefaultClient.Do(textReq)
+		if err != nil {
+			textScrapeErr = err
+			return
+		}
+		defer textResp.Body.Close()
+		_, textBody, err := ps.readResponse(textResp)
+		if err != nil {
+			textScrapeErr = err
+			return
+		}
+
+		seriesScrapeText = ps.extractMetricSeriesText(textBody)
+	}()
+
+	wg.Wait()
+
+	if scrapeErr != nil {
+		return nil, scrapeErr
 	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	contentType, body, err := ps.readResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	ps.lastScrapeContentType = contentType
-
-	metrics, err := ps.extractMetrics(body, contentType)
-	if err != nil {
-		return nil, err
+	if textScrapeErr != nil {
+		return nil, textScrapeErr
 	}
 
 	return &Result{
-		Series:          metrics,
-		UsedContentType: contentType,
+		Series:           seriesSet,
+		UsedContentType:  ps.lastScrapeContentType,
+		SeriesScrapeText: seriesScrapeText,
 	}, nil
 }
 
@@ -99,19 +158,14 @@ func (ps *PromScraper) LastScrapeContentType() string {
 	return ps.lastScrapeContentType
 }
 
-func (ps *PromScraper) setupRequest() (*http.Request, error) {
+func (ps *PromScraper) setupRequest(accept []config.ScrapeProtocol) (*http.Request, error) {
 	// Scrape the URL and analyze the cardinality.
 	req, err := http.NewRequest("GET", ps.scrapeURL, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	acceptHeader := acceptHeader([]config.ScrapeProtocol{
-		config.PrometheusProto,
-		config.OpenMetricsText1_0_0,
-		config.PrometheusText0_0_4,
-		config.OpenMetricsText0_0_1,
-	})
+	acceptHeader := acceptHeader(accept)
 	req.Header.Set("Accept", acceptHeader)
 	req.Header.Set("Accept-Encoding", "gzip")
 	req.Header.Set("X-Prometheus-Scrape-Timeout-Seconds", strconv.FormatInt(int64(ps.timeout.Seconds()), 10))
@@ -164,9 +218,10 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 	}
 
 	var (
-		lset        labels.Labels
-		currentType string
-		defTime     = timestamp.FromTime(time.Now())
+		lset           labels.Labels
+		currentType    string
+		baseMetricName string
+		defTime        = timestamp.FromTime(time.Now())
 	)
 
 	for {
@@ -181,8 +236,10 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 
 		switch entry {
 		case textparse.EntryType:
-			_, metricType := parser.Type()
+			metricName, metricType := parser.Type()
 			currentType = string(metricType)
+			baseMetricName = string(metricName)
+
 			continue // Skip to next iteration as we don't need to process this entry further
 
 		case textparse.EntrySeries:
@@ -191,6 +248,12 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 			if metricName == "" {
 				level.Debug(ps.logger).Log("msg", "metric name not found in labels", "labels", lset.String())
 				continue
+			}
+
+			// Combine series belonging to the same classic histogram or summary metric
+			// ex: the series elapsed_seconds_bucket, elapsed_seconds_count, elapsed_seconds_sum are tracked as elapsed_seconds
+			if currentType == "histogram" || currentType == "summary" {
+				metricName = baseMetricName
 			}
 
 			if _, ok := metrics[metricName]; !ok {
@@ -226,8 +289,8 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 				"timestamp", t,
 				"has_ct_zero", series.CreatedTimestamp != 0,
 			)
-
 		case textparse.EntryHistogram:
+			// Processing solely for native histograms
 			_ = parser.Metric(&lset)
 			metricName := lset.Get(labels.MetricName)
 			if metricName == "" {
@@ -290,6 +353,72 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 	}
 
 	return metrics, nil
+}
+
+func (ps *PromScraper) extractMetricSeriesText(textScrapeResponse []byte) SeriesScrapeText {
+	seriesScrapeText := make(map[string]string)
+	metricNamePattern := regexp.MustCompile(`^[^{\s]+`)
+	lines := strings.Split(string(textScrapeResponse), "\n")
+	// a metric's series are not on consecutive lines for histogram and summary metrics
+	// so a strings.Builder is kept in memory for each metric
+	metricLines := make(map[string]*strings.Builder)
+
+	// For histograms and summaries, we need to map the base metric name to all its suffixes
+	baseMetrics := make(map[string]bool)
+
+	// First pass: identify histogram and summary base metrics
+	for _, line := range lines {
+		if strings.HasPrefix(line, "# TYPE") {
+			parts := strings.Fields(line)
+			if len(parts) >= 4 && (parts[3] == "histogram" || parts[3] == "summary") {
+				baseMetrics[parts[2]] = true
+			}
+		}
+	}
+
+	// Second pass: collect all lines
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
+
+		var parsedMetric string
+		if strings.HasPrefix(line, "#") {
+			parts := strings.Split(line, " ")
+			if len(parts) >= 3 {
+				parsedMetric = parts[2]
+			}
+		} else {
+			parsedMetric = metricNamePattern.FindString(line)
+		}
+		if parsedMetric == "" {
+			_ = level.Debug(ps.logger).Log("msg", "failed to parse metric name from line", "line", line)
+			continue
+		}
+
+		// For histogram and summary metrics, also add the line to the base metric
+		baseMetric := parsedMetric
+		for prefix := range baseMetrics {
+			if strings.HasPrefix(parsedMetric, prefix+"_") {
+				baseMetric = prefix
+				break
+			}
+		}
+
+		sb, ok := metricLines[baseMetric]
+		if !ok {
+			sb = &strings.Builder{}
+			metricLines[baseMetric] = sb
+		}
+
+		sb.WriteString(line)
+		sb.WriteString("\n")
+	}
+
+	for metric, sb := range metricLines {
+		seriesScrapeText[metric] = sb.String()
+	}
+	return seriesScrapeText
 }
 
 // acceptHeader transforms preference from the options into specific header values as

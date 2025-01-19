@@ -17,6 +17,7 @@ type Series struct {
 }
 
 type SeriesSet map[uint64]Series
+type SeriesScrapeText map[string]string
 
 func (s SeriesSet) Cardinality() int {
 	return len(s)
@@ -125,6 +126,7 @@ type SeriesMap map[string]SeriesSet
 type Result struct {
 	Series          SeriesMap
 	UsedContentType string
+	SeriesScrapeText
 }
 
 type SeriesInfo struct {
