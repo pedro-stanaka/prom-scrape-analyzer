@@ -218,9 +218,10 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 	}
 
 	var (
-		lset        labels.Labels
-		currentType string
-		defTime     = timestamp.FromTime(time.Now())
+		lset           labels.Labels
+		currentType    string
+		baseMetricName string
+		defTime        = timestamp.FromTime(time.Now())
 	)
 
 	for {
@@ -235,8 +236,10 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 
 		switch entry {
 		case textparse.EntryType:
-			_, metricType := parser.Type()
+			metricName, metricType := parser.Type()
 			currentType = string(metricType)
+			baseMetricName = string(metricName)
+
 			continue // Skip to next iteration as we don't need to process this entry further
 
 		case textparse.EntrySeries:
@@ -247,22 +250,10 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 				continue
 			}
 
-			// Combined series belonging to the same classic histogram
+			// Combine series belonging to the same classic histogram or summary metric
 			// ex: the series elapsed_seconds_bucket, elapsed_seconds_count, elapsed_seconds_sum are tracked as elapsed_seconds
-			if currentType == "histogram" {
-				parts := strings.Split(metricName, "_")
-				if len(parts) > 1 {
-					metricName = strings.Join(parts[:len(parts)-1], "_")
-				}
-			}
-
-			// Combine series belonging to the same summary metric
-			// ex: the series elapsed_seconds, elapsed_seconds_count, elapsed_seconds_sum are tracked as elapsed_seconds
-			if currentType == "summary" {
-				parts := strings.Split(metricName, "_")
-				if len(parts) > 1 && (parts[len(parts)-1] == "count" || parts[len(parts)-1] == "sum") {
-					metricName = strings.Join(parts[:len(parts)-1], "_")
-				}
+			if currentType == "histogram" || currentType == "summary" {
+				metricName = baseMetricName
 			}
 
 			if _, ok := metrics[metricName]; !ok {
