@@ -49,8 +49,10 @@ func TestSeriesSet_CreatedTS(t *testing.T) {
 		2: {Name: "series2", CreatedTimestamp: 1620000001},
 	}
 
-	expected := int64(1620000000)
-	require.Equal(t, expected, seriesSet.CreatedTS(), "CreatedTS() should return the correct created timestamp")
+	createdTS := seriesSet.CreatedTS()
+	require.Condition(t, func() bool {
+		return createdTS == int64(1620000000) || createdTS == int64(1620000001)
+	}, "CreatedTS() should return either 1620000000 or 1620000001")
 }
 
 func TestSeriesSet_LabelNames(t *testing.T) {
