@@ -279,13 +279,13 @@ func (m *seriesTable) updateWhileBrowsingTable(msg tea.Msg) (tea.Model, tea.Cmd)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 
-			// Run the editor and clean up
+			// Run the editor
 			err := cmd.Run()
-			os.Remove(tmpFile)
+			// Ideally the temp file would be removed here but that causes issues with editors like vscode
 			if err != nil {
 				return m, m.flashMsg.Flash("Failed to run editor: "+err.Error(), internal.Error, flashDuration)
 			}
-			return m, tea.Quit
+			return m, nil
 		case "/":
 			m.searchingMetrics = true
 			m.searchInput.SetCursor(int(cursor.CursorBlink))
