@@ -84,9 +84,11 @@ type seriesTable struct {
 	err              error
 	infoTitle        string
 	flashMsg         internal.TextFlash
+	program          *tea.Program
+	logger           log.Logger
 }
 
-func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
+func newModel(sm map[string]scrape.SeriesSet, height int, logger log.Logger) *seriesTable {
 	tbl := table.New(
 		table.WithColumns([]table.Column{
 			{Title: "Name", Width: 60},
@@ -126,6 +128,7 @@ func newModel(sm map[string]scrape.SeriesSet, height int) *seriesTable {
 		loading:          true,
 		searchingMetrics: false,
 		flashMsg:         internal.TextFlash{},
+		logger:           logger,
 	}
 
 	return m
@@ -279,8 +282,21 @@ func (m *seriesTable) updateWhileBrowsingTable(msg tea.Msg) (tea.Model, tea.Cmd)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 
-			// Run the editor
-			err := cmd.Run()
+			// Pause the program to allow the editor to run without interference
+			err := m.program.ReleaseTerminal()
+			if err != nil {
+				return m, m.flashMsg.Flash("Error preparing to view series: "+err.Error(), internal.Error, flashDuration)
+			}
+			defer func() {
+				err := m.program.RestoreTerminal()
+				if err != nil {
+					_ = level.Warn(m.logger).Log("msg", "Failed to restore terminal", "err", err)
+				}
+			}()
+
+			// Display the editor
+			err = cmd.Run()
+
 			// Ideally the temp file would be removed here but that causes issues with editors like vscode
 			if err != nil {
 				return m, m.flashMsg.Flash("Failed to run editor: "+err.Error(), internal.Error, flashDuration)
@@ -379,8 +395,9 @@ func registerCardinalityCommand(app *extkingpin.App) {
 		scrapeURL := opts.ScrapeURL
 		timeoutDuration := opts.Timeout
 
-		metricTable := newModel(nil, opts.OutputHeight)
+		metricTable := newModel(nil, opts.OutputHeight, logger)
 		p := tea.NewProgram(metricTable)
+		metricTable.program = p
 
 		// Create a channel to signal when scraping is complete
 		scrapeDone := make(chan struct{})
