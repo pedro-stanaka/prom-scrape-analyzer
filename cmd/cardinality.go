@@ -262,6 +262,10 @@ func (m *seriesTable) updateWhileBrowsingTable(msg tea.Msg) (tea.Model, tea.Cmd)
 			return m, cmd
 		case "enter", "v":
 			selectedRow := m.table.SelectedRow()
+			if len(selectedRow) == 0 {
+				return m, m.flashMsg.Flash("No series available to open", internal.Error, flashDuration)
+			}
+
 			metricName := selectedRow[0]
 			seriesText := m.seriesScrapeText[metricName]
 
