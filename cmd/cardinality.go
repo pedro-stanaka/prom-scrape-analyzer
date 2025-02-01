@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -352,9 +353,8 @@ func (m *seriesTable) updateWhileSearchingMetrics(msg tea.Msg) (tea.Model, tea.C
 
 				oldRowCount := len(m.table.Rows())
 				if len(m.searchInput.Value()) > 0 {
-					v := strings.ToLower(m.searchInput.Value())
 					m.setTableRows(func(info scrape.SeriesInfo) bool {
-						return strings.Contains(strings.ToLower(info.Name), v)
+						return fuzzy.MatchFold(m.searchInput.Value(), info.Name)
 					})
 				} else {
 					// Show all rows
