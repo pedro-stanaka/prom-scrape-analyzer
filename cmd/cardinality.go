@@ -398,6 +398,7 @@ func registerCardinalityCommand(app *extkingpin.App) {
 	) error {
 		scrapeURL := opts.ScrapeURL
 		timeoutDuration := opts.Timeout
+		httpConfigFile := opts.HttpConfigFile
 
 		metricTable := newModel(nil, opts.OutputHeight, logger)
 		p := tea.NewProgram(metricTable)
@@ -426,6 +427,7 @@ func registerCardinalityCommand(app *extkingpin.App) {
 				"url", scrapeURL,
 				"timeout", timeoutDuration,
 				"max_size", maxSize,
+				"http_config_file", httpConfigFile,
 			)
 
 			t0 := time.Now()
@@ -434,6 +436,7 @@ func registerCardinalityCommand(app *extkingpin.App) {
 				logger,
 				scrape.WithTimeout(timeoutDuration),
 				scrape.WithMaxBodySize(maxSize),
+				scrape.WithHttpConfigFile(httpConfigFile),
 			)
 			metrics, err := scraper.Scrape()
 			if err != nil {
