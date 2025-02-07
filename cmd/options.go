@@ -9,10 +9,11 @@ import (
 )
 
 type Options struct {
-	ScrapeURL     string
-	OutputHeight  int
-	MaxScrapeSize string
-	Timeout       time.Duration
+	ScrapeURL      string
+	OutputHeight   int
+	MaxScrapeSize  string
+	Timeout        time.Duration
+	HttpConfigFile string
 }
 
 func (o *Options) MaxScrapeSizeBytes() (int64, error) {
@@ -39,4 +40,8 @@ func (o *Options) AddFlags(app extkingpin.AppClause) {
 	app.Flag("max-scrape-size", "Maximum size of the scrape response body (e.g. 10MB, 1GB)").
 		Default("100MB").
 		StringVar(&o.MaxScrapeSize)
+
+	app.Flag("http.config", "Path to file to use for HTTP client config options like basic auth and TLS.").
+		Default("").
+		StringVar(&o.HttpConfigFile)
 }

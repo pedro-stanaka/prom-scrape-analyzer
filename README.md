@@ -23,6 +23,7 @@ for creating an intuitive and interactive command-line interface.
 - [x] Support for latest features like Created Timestamps and Native Histograms, showing them as separate columns.
 - [x] Allow to select a specific metric to inspect, and show its series.
 - [x] Metric search with fuzzy search.
+- [x] [HTTP configuration file](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_config) to support custom HTTP client options like basic auth, custom headers, proxy configs, etc.
 
 ## Planned Features
 

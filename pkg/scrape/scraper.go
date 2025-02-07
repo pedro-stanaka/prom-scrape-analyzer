@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/textparse"
@@ -20,6 +21,7 @@ import (
 )
 
 type PromScraper struct {
+	httpConfigFile        string
 	scrapeURL             string
 	timeout               time.Duration
 	logger                log.Logger
@@ -29,8 +31,9 @@ type PromScraper struct {
 }
 
 type scrapeOpts struct {
-	timeout     time.Duration
-	maxBodySize int64
+	httpConfigFile string
+	timeout        time.Duration
+	maxBodySize    int64
 }
 
 type ScraperOption func(*scrapeOpts)
@@ -47,10 +50,17 @@ func WithMaxBodySize(maxBodySize int64) ScraperOption {
 	}
 }
 
+func WithHttpConfigFile(file string) ScraperOption {
+	return func(opts *scrapeOpts) {
+		opts.httpConfigFile = file
+	}
+}
+
 func NewPromScraper(scrapeURL string, logger log.Logger, opts ...ScraperOption) *PromScraper {
 	scOpts := &scrapeOpts{
-		timeout:     10 * time.Second,
-		maxBodySize: 10 * 1024 * 1024,
+		timeout:        10 * time.Second,
+		maxBodySize:    10 * 1024 * 1024,
+		httpConfigFile: "",
 	}
 
 	for _, opt := range opts {
@@ -58,10 +68,11 @@ func NewPromScraper(scrapeURL string, logger log.Logger, opts ...ScraperOption) 
 	}
 
 	return &PromScraper{
-		scrapeURL:   scrapeURL,
-		logger:      logger,
-		timeout:     scOpts.timeout,
-		maxBodySize: scOpts.maxBodySize,
+		scrapeURL:      scrapeURL,
+		logger:         logger,
+		timeout:        scOpts.timeout,
+		maxBodySize:    scOpts.maxBodySize,
+		httpConfigFile: scOpts.httpConfigFile,
 
 		series: make(map[string]SeriesSet),
 	}
@@ -75,6 +86,23 @@ func (ps *PromScraper) Scrape() (*Result, error) {
 		textScrapeErr    error
 		wg               sync.WaitGroup
 	)
+
+	httpClient := http.DefaultClient
+	if ps.httpConfigFile != "" {
+		httpCfg, _, err := config_util.LoadHTTPConfigFile(ps.httpConfigFile)
+		if err != nil {
+			return &Result{}, fmt.Errorf("Failed to load HTTP configuration file %s: %w", ps.httpConfigFile, err)
+		}
+
+		if err = httpCfg.Validate(); err != nil {
+			return &Result{}, fmt.Errorf("Failed to validate HTTP configuration file %s: %w", ps.httpConfigFile, err)
+		}
+
+		httpClient, err = config_util.NewClientFromConfig(*httpCfg, "prom-scrape-analyzer")
+		if err != nil {
+			return &Result{}, fmt.Errorf("Failed to create HTTP client from configuration file %s: %w", ps.httpConfigFile, err)
+		}
+	}
 
 	// First prioritize scraping PrometheusProto format for access to data about created timestamps and native histograms
 	wg.Add(1)
@@ -91,7 +119,7 @@ func (ps *PromScraper) Scrape() (*Result, error) {
 			return
 		}
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			scrapeErr = err
 			return
@@ -123,7 +151,8 @@ func (ps *PromScraper) Scrape() (*Result, error) {
 			textScrapeErr = err
 			return
 		}
-		textResp, err := http.DefaultClient.Do(textReq)
+
+		textResp, err := httpClient.Do(textReq)
 		if err != nil {
 			textScrapeErr = err
 			return
