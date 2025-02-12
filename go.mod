@@ -14,7 +14,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/prometheus v0.55.1-0.20241102120812-a6fd22b9d2c8
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/thanos-io/thanos v0.37.2
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
