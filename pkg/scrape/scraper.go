@@ -241,7 +241,7 @@ func (ps *PromScraper) readResponse(resp *http.Response) (string, []byte, error)
 
 func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[string]SeriesSet, error) {
 	metrics := make(map[string]SeriesSet)
-	parser, err := textparse.New(body, contentType, false, nil)
+	parser, err := textparse.New(body, contentType, "", false, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parser: %w", err)
 	}
