@@ -397,8 +397,17 @@ func registerCardinalityCommand(app *extkingpin.App) {
 		_ bool,
 	) error {
 		scrapeURL := opts.ScrapeURL
+		scrapeFile := opts.ScrapeFile
 		timeoutDuration := opts.Timeout
 		httpConfigFile := opts.HttpConfigFile
+
+		if scrapeURL == "" && scrapeFile == "" {
+			return errors.New("No URL or file provided to scrape metrics. Please supply a target to scrape via `--scrape.url` or `--scrape.file` flags.")
+		}
+
+		if scrapeURL != "" && scrapeFile != "" {
+			return errors.New("The flags `--scrape.url` and `--scrape.file` are mutually exclusive.")
+		}
 
 		metricTable := newModel(nil, opts.OutputHeight, logger)
 		p := tea.NewProgram(metricTable)
@@ -424,7 +433,8 @@ func registerCardinalityCommand(app *extkingpin.App) {
 
 			level.Info(logger).Log(
 				"msg", "scraping",
-				"url", scrapeURL,
+				"scrape_url", scrapeURL,
+				"scrape_file", scrapeFile,
 				"timeout", timeoutDuration,
 				"max_size", maxSize,
 				"http_config_file", httpConfigFile,
@@ -433,6 +443,7 @@ func registerCardinalityCommand(app *extkingpin.App) {
 			t0 := time.Now()
 			scraper := scrape.NewPromScraper(
 				scrapeURL,
+				scrapeFile,
 				logger,
 				scrape.WithTimeout(timeoutDuration),
 				scrape.WithMaxBodySize(maxSize),

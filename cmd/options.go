@@ -10,6 +10,7 @@ import (
 
 type Options struct {
 	ScrapeURL      string
+	ScrapeFile     string
 	OutputHeight   int
 	MaxScrapeSize  string
 	Timeout        time.Duration
@@ -26,8 +27,12 @@ func (o *Options) MaxScrapeSizeBytes() (int64, error) {
 
 func (o *Options) AddFlags(app extkingpin.AppClause) {
 	app.Flag("scrape-url", "URL to scrape metrics from").
-		Required().
+		Default("").
 		StringVar(&o.ScrapeURL)
+
+	app.Flag("scrape-file", "File to scrape metrics from").
+		Default("").
+		StringVar(&o.ScrapeFile)
 
 	app.Flag("timeout", "Timeout for the scrape request").
 		Default("10s").
