@@ -24,6 +24,7 @@ for creating an intuitive and interactive command-line interface.
 - [x] Allow to select a specific metric to inspect, and show its series.
 - [x] Metric search with fuzzy search.
 - [x] [HTTP configuration file](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_config) to support custom HTTP client options like basic auth, custom headers, proxy configs, etc.
+- [x] Support reading metrics from local files, to help analyze metrics that have already been collected.
 
 ## Planned Features
 

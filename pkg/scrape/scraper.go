@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ import (
 type PromScraper struct {
 	httpConfigFile        string
 	scrapeURL             string
+	scrapeFile            string
 	timeout               time.Duration
 	logger                log.Logger
 	series                map[string]SeriesSet
@@ -56,7 +58,7 @@ func WithHttpConfigFile(file string) ScraperOption {
 	}
 }
 
-func NewPromScraper(scrapeURL string, logger log.Logger, opts ...ScraperOption) *PromScraper {
+func NewPromScraper(scrapeURL string, scrapeFile string, logger log.Logger, opts ...ScraperOption) *PromScraper {
 	scOpts := &scrapeOpts{
 		timeout:        10 * time.Second,
 		maxBodySize:    10 * 1024 * 1024,
@@ -69,6 +71,7 @@ func NewPromScraper(scrapeURL string, logger log.Logger, opts ...ScraperOption) 
 
 	return &PromScraper{
 		scrapeURL:      scrapeURL,
+		scrapeFile:     scrapeFile,
 		logger:         logger,
 		timeout:        scOpts.timeout,
 		maxBodySize:    scOpts.maxBodySize,
@@ -79,6 +82,58 @@ func NewPromScraper(scrapeURL string, logger log.Logger, opts ...ScraperOption) 
 }
 
 func (ps *PromScraper) Scrape() (*Result, error) {
+	if ps.scrapeFile != "" {
+		return ps.ScrapeFile()
+	}
+
+	return ps.ScrapeHTTP()
+}
+
+func (ps *PromScraper) ScrapeFile() (*Result, error) {
+	var (
+		seriesSet        map[string]SeriesSet
+		seriesScrapeText SeriesScrapeText
+	)
+
+	// Don't use os.ReadFile(); manually open the file so we can create an
+	// io.LimitReader from the file to enforce max body size.
+	f, err := os.Open(ps.scrapeFile)
+	if err != nil {
+		return &Result{}, fmt.Errorf("Failed to open file %s to scrape metrics: %w", ps.scrapeFile, err)
+	}
+	defer f.Close()
+
+	body, err := io.ReadAll(io.LimitReader(f, ps.maxBodySize))
+	if err != nil {
+		return &Result{}, fmt.Errorf("Failed reading file %s to scrape metrics: %w", ps.scrapeFile, err)
+	}
+
+	if int64(len(body)) >= ps.maxBodySize {
+		level.Warn(ps.logger).Log(
+			"msg", "metric file body size limit exceeded",
+			"limit_bytes", ps.maxBodySize,
+			"body_size", len(body),
+		)
+		return &Result{}, fmt.Errorf("metric file body size exceeded limit of %d bytes", ps.maxBodySize)
+	}
+
+	// assume that scraping metrics from a file implies they're in text format.
+	contentType := "text/plain"
+	ps.lastScrapeContentType = contentType
+	seriesSet, scrapeErr := ps.extractMetrics(body, contentType)
+	if scrapeErr != nil {
+		return &Result{}, fmt.Errorf("failed to extract metrics from file: %w", scrapeErr)
+	}
+	seriesScrapeText = ps.extractMetricSeriesText(body)
+
+	return &Result{
+		Series:           seriesSet,
+		UsedContentType:  contentType,
+		SeriesScrapeText: seriesScrapeText,
+	}, nil
+}
+
+func (ps *PromScraper) ScrapeHTTP() (*Result, error) {
 	var (
 		seriesSet        map[string]SeriesSet
 		scrapeErr        error
