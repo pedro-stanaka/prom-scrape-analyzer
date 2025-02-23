@@ -402,7 +402,8 @@ func registerCardinalityCommand(app *extkingpin.App) {
 		httpConfigFile := opts.HttpConfigFile
 
 		if scrapeURL == "" && scrapeFile == "" {
-			return errors.New("No URL or file provided to scrape metrics. Please supply a target to scrape via `--scrape.url` or `--scrape.file` flags.")
+			return errors.New("No URL or file provided to scrape metrics. " +
+				"Please supply a target to scrape via `--scrape.url` or `--scrape.file` flags.")
 		}
 
 		if scrapeURL != "" && scrapeFile != "" {
