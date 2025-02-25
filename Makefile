@@ -14,10 +14,10 @@ CGO_ENABLED=0
 
 all: test build
 
-build:
+build: lint test
 	GOARCH=$(GOARCH) GOOS=$(GOOS) CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) $(BUILD_FLAGS) -o $(BINARY_NAME) ./cmd/...
 
-test:
+test: deps
 	$(GOTEST) ./...
 
 clean:
