@@ -24,7 +24,7 @@ import (
 type PromScraper struct {
 	httpConfigFile        string
 	scrapeURL             string
-	scrapeFile            string
+	scrapeFilePath        string
 	timeout               time.Duration
 	logger                log.Logger
 	series                map[string]SeriesSet
@@ -71,7 +71,7 @@ func NewPromScraper(scrapeURL string, scrapeFile string, logger log.Logger, opts
 
 	return &PromScraper{
 		scrapeURL:      scrapeURL,
-		scrapeFile:     scrapeFile,
+		scrapeFilePath: scrapeFile,
 		logger:         logger,
 		timeout:        scOpts.timeout,
 		maxBodySize:    scOpts.maxBodySize,
@@ -82,14 +82,14 @@ func NewPromScraper(scrapeURL string, scrapeFile string, logger log.Logger, opts
 }
 
 func (ps *PromScraper) Scrape() (*Result, error) {
-	if ps.scrapeFile != "" {
-		return ps.ScrapeFile()
+	if ps.scrapeFilePath != "" {
+		return ps.scrapeFile()
 	}
 
-	return ps.ScrapeHTTP()
+	return ps.scrapeHTTP()
 }
 
-func (ps *PromScraper) ScrapeFile() (*Result, error) {
+func (ps *PromScraper) scrapeFile() (*Result, error) {
 	var (
 		seriesSet        map[string]SeriesSet
 		seriesScrapeText SeriesScrapeText
@@ -97,15 +97,15 @@ func (ps *PromScraper) ScrapeFile() (*Result, error) {
 
 	// Don't use os.ReadFile(); manually open the file so we can create an
 	// io.LimitReader from the file to enforce max body size.
-	f, err := os.Open(ps.scrapeFile)
+	f, err := os.Open(ps.scrapeFilePath)
 	if err != nil {
-		return &Result{}, fmt.Errorf("Failed to open file %s to scrape metrics: %w", ps.scrapeFile, err)
+		return &Result{}, fmt.Errorf("Failed to open file %s to scrape metrics: %w", ps.scrapeFilePath, err)
 	}
 	defer f.Close()
 
 	body, err := io.ReadAll(io.LimitReader(f, ps.maxBodySize))
 	if err != nil {
-		return &Result{}, fmt.Errorf("Failed reading file %s to scrape metrics: %w", ps.scrapeFile, err)
+		return &Result{}, fmt.Errorf("Failed reading file %s to scrape metrics: %w", ps.scrapeFilePath, err)
 	}
 
 	if int64(len(body)) >= ps.maxBodySize {
@@ -133,7 +133,7 @@ func (ps *PromScraper) ScrapeFile() (*Result, error) {
 	}, nil
 }
 
-func (ps *PromScraper) ScrapeHTTP() (*Result, error) {
+func (ps *PromScraper) scrapeHTTP() (*Result, error) {
 	var (
 		seriesSet        map[string]SeriesSet
 		scrapeErr        error
