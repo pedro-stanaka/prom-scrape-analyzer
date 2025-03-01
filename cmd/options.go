@@ -26,11 +26,11 @@ func (o *Options) MaxScrapeSizeBytes() (int64, error) {
 }
 
 func (o *Options) AddFlags(app extkingpin.AppClause) {
-	app.Flag("scrape-url", "URL to scrape metrics from").
+	app.Flag("scrape.url", "URL to scrape metrics from").
 		Default("").
 		StringVar(&o.ScrapeURL)
 
-	app.Flag("scrape-file", "File to scrape metrics from").
+	app.Flag("scrape.file", "File to scrape metrics from").
 		Default("").
 		StringVar(&o.ScrapeFile)
 
