@@ -55,6 +55,10 @@ var tableHelp = help.New().ShortHelpView([]key.Binding{
 		key.WithHelp("/", "search metrics"),
 	),
 	key.NewBinding(
+		key.WithKeys("l"),
+		key.WithHelp("l", "search label names"),
+	),
+	key.NewBinding(
 		key.WithKeys("enter", "v"),
 		key.WithHelp("v/↵", "view series in text editor"),
 	),
@@ -82,6 +86,7 @@ type seriesTable struct {
 	seriesScrapeText scrape.SeriesScrapeText
 	loading          bool
 	searchingMetrics bool
+	searchingLabels  bool
 	err              error
 	infoTitle        string
 	flashMsg         internal.TextFlash
@@ -119,7 +124,7 @@ func newModel(sm map[string]scrape.SeriesSet, height int, logger log.Logger) *se
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	ti := textinput.New()
-	ti.Placeholder = "Metric name"
+	ti.Placeholder = "Search value"
 
 	m := &seriesTable{
 		table:            tbl,
@@ -162,13 +167,13 @@ func (m *seriesTable) View() string {
 
 	var view strings.Builder
 
-	if m.searchingMetrics {
+	if m.searchingMetrics || m.searchingLabels {
 		view.WriteString(baseStyle.Render(m.searchInput.View()))
 	}
 
 	flashText := m.flashMsg.View()
 	if flashText != "" {
-		if m.searchingMetrics {
+		if m.searchingMetrics || m.searchingLabels {
 			view.WriteString("\n")
 		}
 		view.WriteString(flashText)
@@ -184,7 +189,7 @@ func (m *seriesTable) View() string {
 		view.WriteString(tableHelp)
 	}
 
-	if m.searchingMetrics {
+	if m.searchingMetrics || m.searchingLabels {
 		total := len(m.seriesMap)
 		filtered := len(m.table.Rows())
 		view.WriteString("\n")
@@ -233,7 +238,7 @@ func (m *seriesTable) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.searchingMetrics {
+	if m.searchingMetrics || m.searchingLabels {
 		return m.updateWhileSearchingMetrics(msg)
 	} else {
 		return m.updateWhileBrowsingTable(msg)
@@ -312,6 +317,11 @@ func (m *seriesTable) updateWhileBrowsingTable(msg tea.Msg) (tea.Model, tea.Cmd)
 			m.searchInput.SetCursor(int(cursor.CursorBlink))
 			m.searchInput.CursorEnd()
 			return m, m.searchInput.Focus()
+		case "l":
+			m.searchingLabels = true
+			m.searchInput.SetCursor(int(cursor.CursorBlink))
+			m.searchInput.CursorEnd()
+			return m, m.searchInput.Focus()
 		}
 	}
 
@@ -353,9 +363,16 @@ func (m *seriesTable) updateWhileSearchingMetrics(msg tea.Msg) (tea.Model, tea.C
 
 				oldRowCount := len(m.table.Rows())
 				if len(m.searchInput.Value()) > 0 {
-					m.setTableRows(func(info scrape.SeriesInfo) bool {
-						return fuzzy.MatchFold(m.searchInput.Value(), info.Name)
-					})
+					switch {
+					case m.searchingMetrics:
+						m.setTableRows(func(info scrape.SeriesInfo) bool {
+							return fuzzy.MatchFold(m.searchInput.Value(), info.Name)
+						})
+					case m.searchingLabels:
+						m.setTableRows(func(info scrape.SeriesInfo) bool {
+							return fuzzy.MatchFold(m.searchInput.Value(), info.Labels)
+						})
+					}
 				} else {
 					// Show all rows
 					m.setTableRows(noFiltering)
