@@ -9,11 +9,27 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 )
 
+type Exemplar struct {
+	Labels labels.Labels
+	Value  float64
+	Ts     int64
+	HasTs  bool
+}
+
+func (e Exemplar) String() string {
+	var ts string
+	if e.HasTs {
+		ts = fmt.Sprintf(" @ %s", time.UnixMilli(e.Ts).Format(time.RFC3339))
+	}
+	return fmt.Sprintf("%s=%g%s", e.Labels.String(), e.Value, ts)
+}
+
 type Series struct {
 	Name             string
 	Labels           labels.Labels
 	Type             string
 	CreatedTimestamp int64
+	Exemplars        []Exemplar
 }
 
 type SeriesSet map[uint64]Series
@@ -57,11 +73,11 @@ func (s SeriesSet) LabelNames() string {
 	}
 	labelSet := make(map[string]struct{})
 	for _, v := range s {
-		for _, l := range v.Labels {
+		v.Labels.Range(func(l labels.Label) {
 			if l.Name != "__name__" {
 				labelSet[l.Name] = struct{}{}
 			}
-		}
+		})
 	}
 	lbls := make([]string, 0, len(labelSet))
 	for label := range labelSet {
@@ -77,7 +93,7 @@ func (s SeriesSet) LabelStats() LabelStatsSlice {
 	labelValueSet := make(map[string]map[string]struct{})
 
 	for _, v := range s {
-		for _, l := range v.Labels {
+		v.Labels.Range(func(l labels.Label) {
 			if l.Name != "__name__" {
 				// Initialize the inner map if it doesn't exist
 				if _, exists := labelValueSet[l.Name]; !exists {
@@ -86,7 +102,7 @@ func (s SeriesSet) LabelStats() LabelStatsSlice {
 				// Add the value to the set
 				labelValueSet[l.Name][l.Value] = struct{}{}
 			}
-		}
+		})
 	}
 
 	var stats []LabelStats
