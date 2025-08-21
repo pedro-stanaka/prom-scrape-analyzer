@@ -99,13 +99,13 @@ func (ps *PromScraper) scrapeFile() (*Result, error) {
 	// io.LimitReader from the file to enforce max body size.
 	f, err := os.Open(ps.scrapeFilePath)
 	if err != nil {
-		return &Result{}, fmt.Errorf("Failed to open file %s to scrape metrics: %w", ps.scrapeFilePath, err)
+		return &Result{}, fmt.Errorf("failed to open file %s to scrape metrics: %w", ps.scrapeFilePath, err)
 	}
 	defer f.Close()
 
 	body, err := io.ReadAll(io.LimitReader(f, ps.maxBodySize))
 	if err != nil {
-		return &Result{}, fmt.Errorf("Failed reading file %s to scrape metrics: %w", ps.scrapeFilePath, err)
+		return &Result{}, fmt.Errorf("failed reading file %s to scrape metrics: %w", ps.scrapeFilePath, err)
 	}
 
 	if int64(len(body)) >= ps.maxBodySize {
@@ -146,16 +146,16 @@ func (ps *PromScraper) scrapeHTTP() (*Result, error) {
 	if ps.httpConfigFile != "" {
 		httpCfg, _, err := config_util.LoadHTTPConfigFile(ps.httpConfigFile)
 		if err != nil {
-			return &Result{}, fmt.Errorf("Failed to load HTTP configuration file %s: %w", ps.httpConfigFile, err)
+			return &Result{}, fmt.Errorf("failed to load HTTP configuration file %s: %w", ps.httpConfigFile, err)
 		}
 
 		if err = httpCfg.Validate(); err != nil {
-			return &Result{}, fmt.Errorf("Failed to validate HTTP configuration file %s: %w", ps.httpConfigFile, err)
+			return &Result{}, fmt.Errorf("failed to validate HTTP configuration file %s: %w", ps.httpConfigFile, err)
 		}
 
 		httpClient, err = config_util.NewClientFromConfig(*httpCfg, "prom-scrape-analyzer")
 		if err != nil {
-			return &Result{}, fmt.Errorf("Failed to create HTTP client from configuration file %s: %w", ps.httpConfigFile, err)
+			return &Result{}, fmt.Errorf("failed to create HTTP client from configuration file %s: %w", ps.httpConfigFile, err)
 		}
 	}
 

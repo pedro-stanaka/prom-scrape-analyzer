@@ -33,7 +33,7 @@ deps:
 	$(GOMOD) tidy
 
 lint: deps
-	golangci-lint run --fix --print-resources-usage ./...
+	go tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint run --fix --verbose ./...
 
 # Cross compilation
 build-linux:
