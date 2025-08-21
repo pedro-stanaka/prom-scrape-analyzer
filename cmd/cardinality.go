@@ -66,6 +66,10 @@ var tableHelp = help.New().ShortHelpView([]key.Binding{
 		key.WithKeys("enter", "v"),
 		key.WithHelp("v/↵", "view series in text editor"),
 	),
+	key.NewBinding(
+		key.WithKeys("e"),
+		key.WithHelp("e", "view exemplars"),
+	),
 })
 var searchHelp = help.New().ShortHelpView([]key.Binding{
 	key.NewBinding(
@@ -278,6 +282,73 @@ func (m *seriesTable) updateWhileBrowsingTable(msg tea.Msg) (tea.Model, tea.Cmd)
 		case "up":
 			m.table, cmd = m.table.Update(msg)
 			return m, cmd
+		case "e":
+			selectedRow := m.table.SelectedRow()
+			if len(selectedRow) == 0 {
+				return m, m.flashMsg.Flash("No series available to view exemplars", internal.Error, flashDuration)
+			}
+
+			metricName := selectedRow[0]
+			seriesSet, exists := m.seriesMap[metricName]
+			if !exists {
+				return m, m.flashMsg.Flash("Metric not found", internal.Error, flashDuration)
+			}
+
+			// Collect all exemplars from all series of this metric
+			var exemplarText strings.Builder
+			exemplarText.WriteString(fmt.Sprintf("# Exemplars for metric: %s\n\n", metricName))
+
+			hasExemplars := false
+			for _, series := range seriesSet {
+				if len(series.Exemplars) > 0 {
+					hasExemplars = true
+					exemplarText.WriteString(fmt.Sprintf("## Series: %s\n", series.Labels.String()))
+					for i, ex := range series.Exemplars {
+						exemplarText.WriteString(fmt.Sprintf("  [%d] %s\n", i+1, ex.String()))
+					}
+					exemplarText.WriteString("\n")
+				}
+			}
+
+			if !hasExemplars {
+				return m, m.flashMsg.Flash("No exemplars found for this metric", internal.Info, flashDuration)
+			}
+
+			// Create temp file and open in editor
+			tmpFile := internal.CreateTempFileWithContent(exemplarText.String())
+			if tmpFile == "" {
+				return m, m.flashMsg.Flash("Failed to create temporary file", internal.Error, flashDuration)
+			}
+
+			editor := os.Getenv("EDITOR")
+			if editor == "" {
+				os.Remove(tmpFile)
+				return m, m.flashMsg.Flash("Please set the EDITOR environment variable", internal.Error, flashDuration)
+			}
+
+			// Run the editor
+			cmd := exec.Command(editor, tmpFile)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+
+			err := m.program.ReleaseTerminal()
+			if err != nil {
+				return m, m.flashMsg.Flash("Error preparing to view exemplars: "+err.Error(), internal.Error, flashDuration)
+			}
+
+			err = cmd.Run()
+
+			// Restore terminal after editor closes
+			restoreErr := m.program.RestoreTerminal()
+			if restoreErr != nil {
+				_ = level.Warn(m.logger).Log("msg", "Failed to restore terminal", "err", restoreErr)
+			}
+
+			if err != nil {
+				return m, m.flashMsg.Flash("Failed to run editor: "+err.Error(), internal.Error, flashDuration)
+			}
+			return m, nil
 		case "enter", "v":
 			selectedRow := m.table.SelectedRow()
 			if len(selectedRow) == 0 {
@@ -309,15 +380,15 @@ func (m *seriesTable) updateWhileBrowsingTable(msg tea.Msg) (tea.Model, tea.Cmd)
 			if err != nil {
 				return m, m.flashMsg.Flash("Error preparing to view series: "+err.Error(), internal.Error, flashDuration)
 			}
-			defer func() {
-				err := m.program.RestoreTerminal()
-				if err != nil {
-					_ = level.Warn(m.logger).Log("msg", "Failed to restore terminal", "err", err)
-				}
-			}()
 
 			// Display the editor
 			err = cmd.Run()
+
+			// Restore terminal after editor closes
+			restoreErr := m.program.RestoreTerminal()
+			if restoreErr != nil {
+				_ = level.Warn(m.logger).Log("msg", "Failed to restore terminal", "err", restoreErr)
+			}
 
 			// Ideally the temp file would be removed here but that causes issues with editors like vscode
 			if err != nil {

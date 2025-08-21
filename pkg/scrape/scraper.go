@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/log/level"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/prometheus/config"
+	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/textparse"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -296,7 +297,7 @@ func (ps *PromScraper) readResponse(resp *http.Response) (string, []byte, error)
 
 func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[string]SeriesSet, error) {
 	metrics := make(map[string]SeriesSet)
-	parser, err := textparse.New(body, contentType, "", false, false, nil)
+	parser, err := textparse.New(body, contentType, "", false, false, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parser: %w", err)
 	}
@@ -327,7 +328,7 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 			continue // Skip to next iteration as we don't need to process this entry further
 
 		case textparse.EntrySeries:
-			_ = parser.Metric(&lset)
+			parser.Labels(&lset)
 			metricName := lset.Get(labels.MetricName)
 			if metricName == "" {
 				level.Debug(ps.logger).Log("msg", "metric name not found in labels", "labels", lset.String())
@@ -358,10 +359,24 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 			}
 
 			ctMs := parser.CreatedTimestamp()
-			if ctMs != nil {
-				series.CreatedTimestamp = *ctMs
-				level.Debug(ps.logger).Log("msg", "found CT zero sample", "metric", metricName, "ct", *ctMs)
+			if ctMs != 0 {
+				series.CreatedTimestamp = ctMs
+				level.Debug(ps.logger).Log("msg", "found CT zero sample", "metric", metricName, "ct", ctMs)
 			}
+
+			// Collect exemplars for this series
+			var exemplars []Exemplar
+			ex := &exemplar.Exemplar{}
+			for parser.Exemplar(ex) {
+				exemplars = append(exemplars, Exemplar{
+					Labels: ex.Labels.Copy(),
+					Value:  ex.Value,
+					Ts:     ex.Ts,
+					HasTs:  ex.HasTs,
+				})
+				ex = &exemplar.Exemplar{}
+			}
+			series.Exemplars = exemplars
 
 			metrics[metricName][hash] = series
 
@@ -372,10 +387,11 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 				"type", currentType,
 				"timestamp", t,
 				"has_ct_zero", series.CreatedTimestamp != 0,
+				"exemplar_count", len(exemplars),
 			)
 		case textparse.EntryHistogram:
 			// Processing solely for native histograms
-			_ = parser.Metric(&lset)
+			parser.Labels(&lset)
 			metricName := lset.Get(labels.MetricName)
 			if metricName == "" {
 				level.Debug(ps.logger).Log("msg", "histogram metric name not found in labels", "labels", lset.String())
@@ -400,14 +416,28 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 			}
 
 			ctMs := parser.CreatedTimestamp()
-			if ctMs != nil {
-				series.CreatedTimestamp = *ctMs
+			if ctMs != 0 {
+				series.CreatedTimestamp = ctMs
 				level.Debug(ps.logger).Log(
 					"msg", "found CT zero sample for histogram",
 					"metric", metricName,
-					"ct", *ctMs,
+					"ct", ctMs,
 				)
 			}
+
+			// Collect exemplars for this histogram
+			var exemplars []Exemplar
+			ex := &exemplar.Exemplar{}
+			for parser.Exemplar(ex) {
+				exemplars = append(exemplars, Exemplar{
+					Labels: ex.Labels.Copy(),
+					Value:  ex.Value,
+					Ts:     ex.Ts,
+					HasTs:  ex.HasTs,
+				})
+				ex = &exemplar.Exemplar{}
+			}
+			series.Exemplars = exemplars
 
 			metrics[metricName][hash] = series
 
@@ -419,6 +449,7 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 					"type", "histogram",
 					"timestamp", t,
 					"has_ct_zero", series.CreatedTimestamp != 0,
+					"exemplar_count", len(exemplars),
 				)
 			} else if fh != nil {
 				level.Debug(ps.logger).Log(
@@ -428,6 +459,7 @@ func (ps *PromScraper) extractMetrics(body []byte, contentType string) (map[stri
 					"type", "float_histogram",
 					"timestamp", t,
 					"has_ct_zero", series.CreatedTimestamp != 0,
+					"exemplar_count", len(exemplars),
 				)
 			}
 

@@ -58,8 +58,8 @@ func TestSeriesSet_CreatedTS(t *testing.T) {
 func TestSeriesSet_LabelNames(t *testing.T) {
 	t.Parallel()
 	seriesSet := scrape.SeriesSet{
-		1: {Name: "series1", Labels: labels.Labels{{Name: "label1"}, {Name: "label2"}}},
-		2: {Name: "series2", Labels: labels.Labels{{Name: "label2"}, {Name: "label3"}}},
+		1: {Name: "series1", Labels: labels.FromStrings("label1", "", "label2", "")},
+		2: {Name: "series2", Labels: labels.FromStrings("label2", "", "label3", "")},
 	}
 
 	expected := "label1|label2|label3"
@@ -75,9 +75,9 @@ func TestSeriesSet_LabelNames(t *testing.T) {
 func TestSeriesSet_LabelStats(t *testing.T) {
 	t.Parallel()
 	seriesSet := scrape.SeriesSet{
-		1: {Name: "series1", Labels: labels.Labels{{Name: "label1", Value: "foo"}, {Name: "label2", Value: "bar"}}},
-		2: {Name: "series2", Labels: labels.Labels{{Name: "label2", Value: "baz"}, {Name: "label3", Value: "qux"}}},
-		3: {Name: "series3", Labels: labels.Labels{{Name: "label2", Value: "baz"}, {Name: "label3", Value: "qua"}}},
+		1: {Name: "series1", Labels: labels.FromStrings("label1", "foo", "label2", "bar")},
+		2: {Name: "series2", Labels: labels.FromStrings("label2", "baz", "label3", "qux")},
+		3: {Name: "series3", Labels: labels.FromStrings("label2", "baz", "label3", "qua")},
 	}
 
 	expected := scrape.LabelStatsSlice{
@@ -98,15 +98,15 @@ func TestSeriesSet_AsRowOrdering(t *testing.T) {
 	t.Parallel()
 	var seriesMap scrape.SeriesMap = make(map[string]scrape.SeriesSet)
 	seriesMap["series1"] = scrape.SeriesSet{
-		1: {Name: "series1", Labels: labels.Labels{{Name: "label1", Value: "foo"}}},
+		1: {Name: "series1", Labels: labels.FromStrings("label1", "foo")},
 	}
 	seriesMap["series2"] = scrape.SeriesSet{
-		1: {Name: "series2", Labels: labels.Labels{{Name: "label1", Value: "foo"}}},
-		2: {Name: "series2", Labels: labels.Labels{{Name: "label1", Value: "bar"}}},
+		1: {Name: "series2", Labels: labels.FromStrings("label1", "foo")},
+		2: {Name: "series2", Labels: labels.FromStrings("label1", "bar")},
 	}
 	seriesMap["series3"] = scrape.SeriesSet{
-		1: {Name: "series3", Labels: labels.Labels{{Name: "label1", Value: "foo"}}},
-		2: {Name: "series3", Labels: labels.Labels{{Name: "label1", Value: "bar"}}},
+		1: {Name: "series3", Labels: labels.FromStrings("label1", "foo")},
+		2: {Name: "series3", Labels: labels.FromStrings("label1", "bar")},
 	}
 
 	rows := seriesMap.AsRows()
@@ -115,4 +115,89 @@ func TestSeriesSet_AsRowOrdering(t *testing.T) {
 	require.Equal(t, "series2", rows[0].Name)
 	require.Equal(t, "series3", rows[1].Name)
 	require.Equal(t, "series1", rows[2].Name)
+}
+
+func TestSeries_Exemplars(t *testing.T) {
+	t.Parallel()
+
+	// Test series with exemplars
+	series := scrape.Series{
+		Name:   "test_metric",
+		Labels: labels.FromStrings("method", "GET", "status", "200"),
+		Type:   "counter",
+		Exemplars: []scrape.Exemplar{
+			{
+				Labels: labels.FromStrings("trace_id", "abc123"),
+				Value:  42.0,
+				Ts:     1620000000000,
+				HasTs:  true,
+			},
+			{
+				Labels: labels.FromStrings("span_id", "xyz789"),
+				Value:  100.5,
+				Ts:     0,
+				HasTs:  false,
+			},
+		},
+	}
+
+	require.Len(t, series.Exemplars, 2, "Series should have 2 exemplars")
+
+	// Test first exemplar
+	ex1 := series.Exemplars[0]
+	require.Equal(t, 42.0, ex1.Value)
+	require.Equal(t, int64(1620000000000), ex1.Ts)
+	require.True(t, ex1.HasTs)
+	require.Equal(t, "abc123", ex1.Labels.Get("trace_id"))
+
+	// Test second exemplar
+	ex2 := series.Exemplars[1]
+	require.Equal(t, 100.5, ex2.Value)
+	require.False(t, ex2.HasTs)
+	require.Equal(t, "xyz789", ex2.Labels.Get("span_id"))
+
+	// Test String() method
+	ex1Str := ex1.String()
+	require.Contains(t, ex1Str, "trace_id=\"abc123\"")
+	require.Contains(t, ex1Str, "42")
+	require.Contains(t, ex1Str, "2021-05-03") // Check timestamp is formatted
+
+	ex2Str := ex2.String()
+	require.Contains(t, ex2Str, "span_id=\"xyz789\"")
+	require.Contains(t, ex2Str, "100.5")
+	require.NotContains(t, ex2Str, "@") // No timestamp should be shown
+}
+
+func TestSeriesSet_WithExemplars(t *testing.T) {
+	t.Parallel()
+
+	seriesSet := scrape.SeriesSet{
+		1: {
+			Name:   "http_requests_total",
+			Labels: labels.FromStrings("method", "GET"),
+			Type:   "counter",
+			Exemplars: []scrape.Exemplar{
+				{
+					Labels: labels.FromStrings("trace_id", "trace1"),
+					Value:  123.0,
+					Ts:     1620000000000,
+					HasTs:  true,
+				},
+			},
+		},
+		2: {
+			Name:   "http_requests_total",
+			Labels: labels.FromStrings("method", "POST"),
+			Type:   "counter",
+			// No exemplars for this series
+		},
+	}
+
+	// Check that we can access exemplars correctly
+	series1 := seriesSet[1]
+	require.Len(t, series1.Exemplars, 1)
+	require.Equal(t, "trace1", series1.Exemplars[0].Labels.Get("trace_id"))
+
+	series2 := seriesSet[2]
+	require.Len(t, series2.Exemplars, 0)
 }
