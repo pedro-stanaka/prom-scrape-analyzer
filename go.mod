@@ -15,7 +15,7 @@ require (
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/common v0.65.0
 	github.com/prometheus/prometheus v0.305.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/thanos-io/thanos v0.37.3-0.20250221064218-f230915c1c13
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
