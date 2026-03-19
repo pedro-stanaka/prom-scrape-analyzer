@@ -15,7 +15,7 @@ require (
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/common v0.65.0
 	github.com/prometheus/prometheus v0.305.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/thanos-io/thanos v0.37.3-0.20250221064218-f230915c1c13
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
@@ -25,7 +25,7 @@ require (
 	4d63.com/gochecknoglobals v0.2.2 // indirect
 	cloud.google.com/go/auth v0.16.2 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
-	cloud.google.com/go/compute/metadata v0.7.0 // indirect
+	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	codeberg.org/chavacava/garif v0.2.0 // indirect
 	dev.gaijin.team/go/exhaustruct/v4 v4.0.0 // indirect
 	dev.gaijin.team/go/golib v0.6.0 // indirect
@@ -249,35 +249,35 @@ require (
 	go-simpler.org/sloglint v0.11.1 // indirect
 	go.augendre.info/arangolint v0.2.0 // indirect
 	go.augendre.info/fatcontext v0.8.0 // indirect
-	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
 	go.opentelemetry.io/contrib/propagators/autoprop v0.54.0 // indirect
 	go.opentelemetry.io/contrib/propagators/aws v1.29.0 // indirect
 	go.opentelemetry.io/contrib/propagators/b3 v1.29.0 // indirect
 	go.opentelemetry.io/contrib/propagators/jaeger v1.29.0 // indirect
 	go.opentelemetry.io/contrib/propagators/ot v1.29.0 // indirect
-	go.opentelemetry.io/otel v1.36.0 // indirect
+	go.opentelemetry.io/otel v1.39.0 // indirect
 	go.opentelemetry.io/otel/bridge/opentracing v1.31.0 // indirect
-	go.opentelemetry.io/otel/metric v1.36.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.36.0 // indirect
-	go.opentelemetry.io/otel/trace v1.36.0 // indirect
+	go.opentelemetry.io/otel/metric v1.39.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.39.0 // indirect
+	go.opentelemetry.io/otel/trace v1.39.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.41.0 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/mod v0.27.0 // indirect
-	golang.org/x/net v0.43.0 // indirect
-	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/oauth2 v0.34.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
-	golang.org/x/tools v0.36.0 // indirect
+	golang.org/x/tools v0.39.0 // indirect
 	google.golang.org/api v0.242.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
-	google.golang.org/grpc v1.73.0 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/grpc v1.79.3 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
